@@ -6,9 +6,11 @@ import java.io.*;
 import java.net.InetAddress;
 import java.net.Socket;
 import java.net.UnknownHostException;
+import java.nio.ByteBuffer;
 import javax.swing.*;
 
 public class Client implements Runnable {
+
     private Socket socket;
     private BufferedReader in;
     private PrintWriter out;
@@ -50,7 +52,21 @@ public class Client implements Runnable {
             }
         }
     }
+    // 在Client类中添加：
+    public synchronized void sendBinaryData(byte[] buffer, int bytesRead,Socket filesock)
+            throws IOException {
 
+        OutputStream os = filesock.getOutputStream();
+
+        // 先发送数据长度（4字节头）
+        ByteBuffer header = ByteBuffer.allocate(4);
+        header.putInt(bytesRead);
+        os.write(header.array());
+
+        // 发送实际数据
+        os.write(buffer,  0, bytesRead);
+        os.flush();
+    }
     @Override
     public void run() {
         try {
@@ -104,6 +120,7 @@ public class Client implements Runnable {
         }
         out.println(message);
     }
+
 
     public void exit() {
         out.println("exit");

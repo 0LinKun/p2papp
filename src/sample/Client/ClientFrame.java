@@ -1,10 +1,20 @@
 package sample.Client;
 
+import sample.AllNeed.FileInfo;
+import sample.AllNeed.FileListManager;
+import sample.Server.Server;
+
 import javax.swing.*;
 import javax.swing.text.DefaultCaret;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.Socket;
+import java.nio.file.Files;
+import java.security.NoSuchAlgorithmException;
 
 public class ClientFrame extends JPanel {
     private final JTextArea displayArea;
@@ -12,9 +22,12 @@ public class ClientFrame extends JPanel {
     private final JButton sendButton;
     private final JButton connectButton;
     private final JTextField ipField;
+    private final JButton uploadButton;
+    private final JProgressBar progressBar;
     private Client client;
     private boolean isConnected = false;
     private static final int SERVER_PORT = 10001; // 假设服务器端口是固定的
+    String ip;
 
     public ClientFrame() {
         setLayout(new BorderLayout());
@@ -53,18 +66,76 @@ public class ClientFrame extends JPanel {
         connectionPanel.add(connectButton);
 
         add(connectionPanel, BorderLayout.NORTH);
+        // 在connectionPanel增加上传按钮
+         uploadButton = new JButton("Upload");
+        connectionPanel.add(uploadButton);  // 添加到现有的连接面板
+        uploadButton.addActionListener(e -> upload());//监听upload
+        // 在inputPanel增加进度显示
+         progressBar = new JProgressBar(0, 100);
+        progressBar.setStringPainted(true);
+        inputPanel.add(progressBar,  BorderLayout.NORTH);
 
         // 设置按钮监听器
         connectButton.addActionListener(e -> connectToServer());
         sendButton.addActionListener(e -> sendMessage());
+        uploadButton.addActionListener(e -> upload());
 
         // 初始化时禁用发送按钮，直到成功连接
         sendButton.setEnabled(false);
+
+
     }
+
+    private void upload() {
+        client.sendMessage("upload");
+        JFileChooser fileChooser = new JFileChooser();
+        if (fileChooser.showOpenDialog(this)  == JFileChooser.APPROVE_OPTION) {
+            File selectedFile = fileChooser.getSelectedFile();
+            new Thread(() -> {
+                try {
+                    Socket filesock = new Socket(ip, Server.FILE_PORT);
+                    // 生成文件元数据
+                    FileInfo fileInfo = FileListManager.generateFileInfo(selectedFile.toPath());
+
+                    //发送文件名
+                    client.sendBinaryData(fileInfo.getFileName().getBytes(),fileInfo.getFileName().getBytes().length,filesock);
+                    // 发送元数据
+                    client.sendMessage("UPLOAD_META#"  + fileInfo.getFileName()
+                            + "#" + fileInfo.getFileSize()
+                            + "#" + fileInfo.getFileHash());
+
+                    // 分块发送
+                    try (InputStream is = Files.newInputStream(selectedFile.toPath()))  {
+                        byte[] buffer = new byte[10 * 1024 * 1024]; // 10MB分块
+                        int bytesRead;
+                        int chunkIndex = 0;
+
+                        while ((bytesRead = is.read(buffer))  > 0) {
+                            String chunkHash = FileListManager.calculateHash(buffer, bytesRead);
+                            client.sendMessage("UPLOAD_CHUNK#"  + chunkIndex
+                                    + "#" + bytesRead
+                                    + "#" + chunkHash);
+                            client.sendBinaryData(buffer,  bytesRead,filesock); // 发送二进制数据
+                            chunkIndex++;
+
+                            // 更新进度
+                            int progress = (int) ((chunkIndex * 10 * 1024 * 1024 * 100)
+                                    / selectedFile.length());
+                            SwingUtilities.invokeLater(()  ->
+                                    progressBar.setValue(progress));
+                        }
+                    }
+                } catch (IOException | NoSuchAlgorithmException ex) {
+                    appendToDisplayArea("上传失败: " + ex.getMessage()  + "\n");
+                }
+            }).start();
+        }
+    }
+
 
     private void connectToServer() {
         if (!isConnected) {
-            String ip = ipField.getText().trim();
+             ip = ipField.getText().trim();
 
             if (ip.isEmpty()) {
                 appendToDisplayArea("Server IP cannot be empty.\n");

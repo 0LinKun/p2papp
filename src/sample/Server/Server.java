@@ -1,12 +1,10 @@
 package sample.Server;
 
+import sample.AllNeed.FileInfo;
 import sample.AllNeed.FileListManager;
 
 import javax.swing.*;
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
+import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.time.Instant;
@@ -14,10 +12,13 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 
 public class Server {
     public static final int SERVER_PORT = 10001;
+    // 文件传输专用端口
+    public static final int FILE_PORT = 8081;
     public static String IP = "IP";
     public static String PORT = "PORT";
     public static String NICKNAME = "NAME";
@@ -50,6 +51,9 @@ public class Server {
             displayArea.append(nowtime(now) + "  " + "服务开启错误: " + e.getMessage() + "\n");
         }
     }
+
+
+
 
     private void acceptConnections() {
         while (true) {
@@ -111,10 +115,13 @@ public class Server {
                         displayArea.append(listAllUsers());
                     } else if (line.equals("filelist") || line.equals("fl")) {
                         fileListManager.updateAndSendFileList(out);
-                        // Handle file sending here...
+
                     } else if (line.equals("help")) {
                         out.println("ls \t list online \n exit  exit \n send file  send file\n");
-                    } else {
+                    }else if (line.equals("upload")){
+                        startFileServer();
+                    }
+                    else {
                         broadcast(nowtime(now) + "  " + client.getInetAddress() + "#" + client.getPort() + ":   " + line + "\n");
                     }
                 }
@@ -174,5 +181,78 @@ public class Server {
             out.println(msg);
         }
     }
+    public static void startFileServer() {
+        new Thread(() -> {
+            try (ServerSocket fileServer = new ServerSocket(FILE_PORT)) {
+                while (true) {
+                    Socket dataSocket = fileServer.accept();
+                    new FileTransferHandler(dataSocket).start();
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }).start();
+    }
 
+    static class FileTransferHandler extends Thread {
+        private final Socket dataSocket;
+
+        public FileTransferHandler(Socket socket) {
+            this.dataSocket  = socket;
+        }
+
+        @Override
+        public void run() {
+            try (DataInputStream dis = new DataInputStream(dataSocket.getInputStream());
+                 DataOutputStream dos = new DataOutputStream(dataSocket.getOutputStream())) {
+
+                // 读取文件名长度和文件名
+                int fileNameLength = dis.readInt();
+                byte[] fileNameBytes = new byte[fileNameLength];
+                dis.readFully(fileNameBytes);
+                String fileName = new String(fileNameBytes, java.nio.charset.StandardCharsets.UTF_8);
+
+                // 创建文件保存路径
+                java.nio.file.Path directory = java.nio.file.Paths.get("file");
+                if (!java.nio.file.Files.exists(directory)) {
+                    java.nio.file.Files.createDirectories(directory);
+                }
+                java.nio.file.Path filePath = directory.resolve(fileName);
+
+                try (java.io.OutputStream fos = java.nio.file.Files.newOutputStream(filePath)) {
+                    byte[] buffer = new byte[10 * 1024 * 1024]; // 10MB缓冲区，与发送端一致
+
+                    while (true) {
+                        int chunkSize;
+                        try {
+                            chunkSize = dis.readInt(); // 读取块大小
+                        } catch (java.io.EOFException e) {
+                            break; // 数据读取完毕
+                        }
+
+                        if (chunkSize <= 0) break;
+
+                        // 读取块数据并写入文件
+                        dis.readFully(buffer, 0, chunkSize);
+                        fos.write(buffer, 0, chunkSize);
+                    }
+                    fos.flush();
+                    System.out.println("文件接收完成: " + filePath);
+                }
+
+            } catch (Exception e) {
+                System.out.println("文件传输错误: " + e.getMessage());
+            }
+        }
+
+        private byte[] getFileChunk(File file, int chunkNumber) throws IOException {
+            try (RandomAccessFile raf = new RandomAccessFile(file, "r")) {
+                long start = (chunkNumber - 1) * FileInfo.chunk_size;
+                raf.seek(start);
+                byte[] buffer = new byte[(int) FileInfo.chunk_size];
+                int read = raf.read(buffer);
+                return read == -1 ? new byte[0] : Arrays.copyOf(buffer,  read);
+            }
+        }
+    }
 }
