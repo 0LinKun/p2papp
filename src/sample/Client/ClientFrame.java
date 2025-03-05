@@ -24,6 +24,7 @@ public class ClientFrame extends JPanel {
     private final JTextField ipField;
     private final JButton uploadButton;
     private final JProgressBar progressBar;
+    private final JButton shareButton;
     private Client client;
     private boolean isConnected = false;
     private static final int SERVER_PORT = 10001; // 假设服务器端口是固定的
@@ -38,14 +39,6 @@ public class ClientFrame extends JPanel {
         // 创建文本区域并启用行包装
         displayArea.setLineWrap(true);
         displayArea.setWrapStyleWord(true);
-
-        // 启用自动滚动
-        DefaultCaret caret = (DefaultCaret) displayArea.getCaret();
-        caret.setUpdatePolicy(DefaultCaret.ALWAYS_UPDATE);
-        // 将文本区域放入滚动面板中
-        JScrollPane scrollPane = new JScrollPane(displayArea);
-        // 添加滚动面板到框架
-        add(scrollPane, BorderLayout.CENTER);
 
         // 创建输入面板
         JPanel inputPanel = new JPanel(new BorderLayout());
@@ -70,10 +63,24 @@ public class ClientFrame extends JPanel {
          uploadButton = new JButton("Upload");
         connectionPanel.add(uploadButton);  // 添加到现有的连接面板
         uploadButton.addActionListener(e -> upload());//监听upload
+        
+        // 在connectionPanel增加分享按钮
+        shareButton = new JButton("Share");
+        connectionPanel.add(shareButton);  // 添加到现有的连接面板
+        uploadButton.addActionListener(e -> share());//监听share
+        
         // 在inputPanel增加进度显示
          progressBar = new JProgressBar(0, 100);
         progressBar.setStringPainted(true);
         inputPanel.add(progressBar,  BorderLayout.NORTH);
+
+        // 启用自动滚动
+        DefaultCaret caret = (DefaultCaret) displayArea.getCaret();
+        caret.setUpdatePolicy(DefaultCaret.ALWAYS_UPDATE);
+        // 将文本区域放入滚动面板中
+        JScrollPane scrollPane = new JScrollPane(displayArea);
+        // 添加滚动面板到框架
+        add(scrollPane, BorderLayout.CENTER);
 
         // 设置按钮监听器
         connectButton.addActionListener(e -> connectToServer());
@@ -86,8 +93,25 @@ public class ClientFrame extends JPanel {
 
     }
 
+    private void share() {
+        client.sendMessage("share");
+        JFileChooser fileChooser = new JFileChooser();
+        if (fileChooser.showOpenDialog(this)  == JFileChooser.APPROVE_OPTION) {
+            File selectedFile = fileChooser.getSelectedFile();
+            new Thread(() -> {
+                try {
+                    //通过组播广播发送文件
+                    new FileSender(selectedFile.toString());
+                    System.out.println("File  share successfully.");
+                } catch (IOException ex) {
+                    appendToDisplayArea("share失败: " + ex.getMessage()  + "\n");
+                }
+            }).start();
+
+        }
+    }
+
     private void upload() {
-        client.sendMessage("upload");
         JFileChooser fileChooser = new JFileChooser();
         if (fileChooser.showOpenDialog(this)  == JFileChooser.APPROVE_OPTION) {
             File selectedFile = fileChooser.getSelectedFile();
@@ -121,14 +145,20 @@ public class ClientFrame extends JPanel {
                             // 更新进度
                             int progress = (int) ((chunkIndex * 10 * 1024 * 1024 * 100)
                                     / selectedFile.length());
-                            SwingUtilities.invokeLater(()  ->
-                                    progressBar.setValue(progress));
+                            SwingUtilities.invokeLater(()  -> progressBar.setValue(progress));
                         }
                     }
                 } catch (IOException | NoSuchAlgorithmException ex) {
                     appendToDisplayArea("上传失败: " + ex.getMessage()  + "\n");
                 }
             }).start();
+            try {
+                //通过组播广播发送文件
+                new FileSender(selectedFile.toString());
+                System.out.println("File  sent successfully.");
+            } catch (IOException e) {
+                System.err.println("Error  sending file: " + e.getMessage());
+            }
         }
     }
 

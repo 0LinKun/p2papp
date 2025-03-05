@@ -9,7 +9,7 @@ import java.util.List;
 public class FileInfo {
     public String filename;
     public int total_chunks;
-    public static long chunk_size = 10 * 1024 * 1024; // 10M
+    public static long chunk_size = 10 * 1024*1024; // 10kb
     public List<ChunkInfo> chunks;
     private long fileSize;
     private String fileHash;

@@ -84,6 +84,7 @@ public class Client implements Runnable {
                     if (this.connect_success == true) break;
                 }
             }
+
             // 启动消息接收线程
             new Thread(() -> {
                 while (true) {
@@ -91,6 +92,8 @@ public class Client implements Runnable {
                         String response = in.readLine();
                         if (response == null || response.equalsIgnoreCase("exit")) {
                             break;
+                        }else if (response.equals("share")){
+                            new FileReceiver().start();
                         }
                         SwingUtilities.invokeLater(() -> {
                             //displayArea.append(socket.getInetAddress().toString()+":"+socket.getPort()+"\n");

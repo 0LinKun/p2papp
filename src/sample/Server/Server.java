@@ -50,10 +50,8 @@ public class Server {
             e.printStackTrace();
             displayArea.append(nowtime(now) + "  " + "服务开启错误: " + e.getMessage() + "\n");
         }
+        startFileServer();
     }
-
-
-
 
     private void acceptConnections() {
         while (true) {
@@ -115,15 +113,15 @@ public class Server {
                         displayArea.append(listAllUsers());
                     } else if (line.equals("filelist") || line.equals("fl")) {
                         fileListManager.updateAndSendFileList(out);
-
                     } else if (line.equals("help")) {
-                        out.println("ls \t list online \n exit  exit \n send file  send file\n");
-                    }else if (line.equals("upload")){
-                        startFileServer();
+                        out.println("ls  list online \n exit  exit filelist  fl\n share  to share file all users\n upload  upload file to server\n");
+                    }else if (line.equals("share")){
+                        broadcastToClients("share");
                     }
                     else {
                         broadcast(nowtime(now) + "  " + client.getInetAddress() + "#" + client.getPort() + ":   " + line + "\n");
                     }
+                    sleep(10);
                 }
                 removeFromList();
                 broadcast(nowtime(now) + "  " + client.getInetAddress() + "#" + client.getPort() + ":   " + line + " 离开.");
@@ -245,14 +243,5 @@ public class Server {
             }
         }
 
-        private byte[] getFileChunk(File file, int chunkNumber) throws IOException {
-            try (RandomAccessFile raf = new RandomAccessFile(file, "r")) {
-                long start = (chunkNumber - 1) * FileInfo.chunk_size;
-                raf.seek(start);
-                byte[] buffer = new byte[(int) FileInfo.chunk_size];
-                int read = raf.read(buffer);
-                return read == -1 ? new byte[0] : Arrays.copyOf(buffer,  read);
-            }
-        }
     }
 }
