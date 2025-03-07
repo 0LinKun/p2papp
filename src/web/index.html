@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文件传输助手</title>
+
+</head>
+<body>
+<div class="container">
+    <h1>文件传输助手</h1>
+    <p>选择文件并点击上传，轻松完成文件传输。</p>
+    <div class="file-box">
+        <input type="file" id="fileInput" class="file-input">
+        <label for="fileInput" class="file-label">选择文件</label>
+        <button class="upload-button">上传文件</button>
+    </div>
+    <div class="status-box">
+        <p id="statusText">等待文件选择...</p>
+    </div>
+</div>
+<style>
+    /* 重置默认样式 */
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+
+    /* 页面背景与字体 */
+    body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background: linear-gradient(135deg, #6a11cb, #2575fc);
+        color: #fff;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        padding: 20px;
+    }
+
+    /* 容器样式 */
+    .container {
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        border-radius: 15px;
+        padding: 30px;
+        max-width: 500px;
+        width: 100%;
+        text-align: center;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    }
+
+    /* 标题样式 */
+    h1 {
+        font-size: 2.5rem;
+        margin-bottom: 10px;
+    }
+
+    /* 描述文字样式 */
+    p {
+        font-size: 1rem;
+        margin-bottom: 20px;
+        color: #e0e0e0;
+    }
+
+    /* 文件选择框样式 */
+    .file-box {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 20px;
+    }
+
+    .file-input {
+        display: none;
+    }
+
+    .file-label {
+        background: #fff;
+        color: #6a11cb;
+        padding: 10px 20px;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: background 0.3s ease;
+    }
+
+    .file-label:hover {
+        background: #f0f0f0;
+    }
+
+    .upload-button {
+        background: #ff416c;
+        color: #fff;
+        padding: 10px 20px;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: background 0.3s ease;
+    }
+
+    .upload-button:hover {
+        background: #ff4b2b;
+    }
+
+    /* 状态框样式 */
+    .status-box {
+        background: rgba(255, 255, 255, 0.1);
+        padding: 15px;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        color: #e0e0e0;}
+
+</style>
+<script>
+    // 获取DOM元素
+    const fileInput = document.getElementById('fileInput');
+    const statusText = document.getElementById('statusText');
+
+    // 监听文件选择事件
+    fileInput.addEventListener('change',  (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            statusText.textContent  = `已选择文件：${file.name}`;
+        } else {
+            statusText.textContent  = '未选择文件';
+        }
+    })
+</script>
+</body>
+</html>
