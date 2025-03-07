@@ -34,13 +34,15 @@ public class ServerFrame extends JPanel {
 
         server = new Server(displayArea);
 
-        sendButton.addActionListener(e -> {
-            String textToSend = inputField.getText();
-            if (!textToSend.isEmpty()) {
-                displayArea.append("Broadcasting: " + textToSend + "\n");
-                inputField.setText("");
-                server.broadcastToClients(textToSend);
-            }
-        });
+        sendButton.addActionListener(e -> Broadcast());
+        inputField.addActionListener(e -> Broadcast());
+    }
+    private void Broadcast() {
+        String textToSend = inputField.getText();
+        if (!textToSend.isEmpty()) {
+            displayArea.append("Broadcasting: " + textToSend + "\n");
+            inputField.setText("");
+            server.broadcastToClients(textToSend);
+        }
     }
 }

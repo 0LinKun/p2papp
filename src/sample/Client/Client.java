@@ -15,7 +15,6 @@ public class Client implements Runnable {
     private BufferedReader in;
     private PrintWriter out;
     private final JTextArea displayArea;
-
     private String nickName;
     private BufferedReader line;
     private final boolean open_server = true;
@@ -30,7 +29,7 @@ public class Client implements Runnable {
         new Thread(this).start();
     }
 
-    public void checkmessage(String message) {
+    public void checkMessage(String message) {
 
         InetAddress addr = null;
         try {
@@ -87,13 +86,17 @@ public class Client implements Runnable {
 
             // 启动消息接收线程
             new Thread(() -> {
+                Boolean FileState = false;
                 while (true) {
                     try {
                         String response = in.readLine();
                         if (response == null || response.equalsIgnoreCase("exit")) {
                             break;
                         }else if (response.equals("share")){
-                            new FileReceiver().start();
+                            if (FileState==false) {
+                                FileState=true;
+                                new FileReceiver().start();
+                            }
                         }
                         SwingUtilities.invokeLater(() -> {
                             //displayArea.append(socket.getInetAddress().toString()+":"+socket.getPort()+"\n");
@@ -117,10 +120,7 @@ public class Client implements Runnable {
     }
 
     public synchronized void sendMessage(String message) {
-        if (message.equals("cls")) {
-            displayArea.setText("");
-            return;
-        }
+
         out.println(message);
     }
 

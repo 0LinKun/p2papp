@@ -76,6 +76,7 @@ public class Server {
     public class CreateServerThread extends Thread {
         private final Socket client;
         private BufferedReader in;
+        private String nikename;
         private PrintWriter out;
         private final Server parent;
 
@@ -105,7 +106,7 @@ public class Server {
 
                 while (true) {
                     line = in.readLine();
-                    displayArea.append(nowtime(now) + "  " + client.getInetAddress() + "#" + client.getPort() + ":   " + line + "\n");
+                    displayArea.append(nowtime(now) + "  " + client.getInetAddress() + "#" + client.getPort() + ":   " + "\n"+ line + "\n");
                     if (line == null || line.equalsIgnoreCase("exit")) {
                         break;
                     } else if (line.equals("ls")) {
@@ -114,17 +115,23 @@ public class Server {
                     } else if (line.equals("filelist") || line.equals("fl")) {
                         fileListManager.updateAndSendFileList(out);
                     } else if (line.equals("help")) {
-                        out.println("ls  list online \n exit  exit filelist  fl\n share  to share file all users\n upload  upload file to server\n");
+                        out.println("|简短指令|解释说明|\n" +
+                                "|ls  |list online 列出在线成员|\n " +
+                                "|cls |clean 清空屏幕|"+
+                                "|exit  |exit 退出连接|\n " +
+                                "|fl    |fileList  列出服务器存在文件|\n " +
+                                "|share  |to share file all users组播分享文件|\n " +
+                                "|upload  |upload file to server上传文件到服务器|\n");
                     }else if (line.equals("share")){
                         broadcastToClients("share");
                     }
                     else {
-                        broadcast(nowtime(now) + "  " + client.getInetAddress() + "#" + client.getPort() + ":   " + line + "\n");
+                        broadcast(nowtime(now) + "  " + this.nikename + "#" + client.getPort() + ":   " + "\n"+ line + "\n");
                     }
                     sleep(10);
                 }
                 removeFromList();
-                broadcast(nowtime(now) + "  " + client.getInetAddress() + "#" + client.getPort() + ":   " + line + " 离开.");
+                broadcast(nowtime(now) + "  " + client.getInetAddress() + "#" + this.nikename+"#" + client.getPort() + ":   " + "\n"+ line + " 离开.");
                 client.close();
             } catch (Exception e) {
                 e.printStackTrace();
@@ -150,6 +157,7 @@ public class Server {
                 return false;
             } else {
                 User_List.add(indentifer);
+                this.nikename=infor[0];
                 displayArea.append(nowtime(now) + "  " + infor[0] + "  " + infor[1] + "  " + infor[2] + "连接成功\n");
                 return true;
             }

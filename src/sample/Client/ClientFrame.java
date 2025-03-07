@@ -62,16 +62,17 @@ public class ClientFrame extends JPanel {
         // 在connectionPanel增加上传按钮
          uploadButton = new JButton("Upload");
         connectionPanel.add(uploadButton);  // 添加到现有的连接面板
-        uploadButton.addActionListener(e -> upload());//监听upload
+
         
         // 在connectionPanel增加分享按钮
         shareButton = new JButton("Share");
         connectionPanel.add(shareButton);  // 添加到现有的连接面板
-        uploadButton.addActionListener(e -> share());//监听share
+
         
         // 在inputPanel增加进度显示
-         progressBar = new JProgressBar(0, 100);
+         progressBar = new JProgressBar();
         progressBar.setStringPainted(true);
+        progressBar.setPreferredSize(new  Dimension(300, 25));
         inputPanel.add(progressBar,  BorderLayout.NORTH);
 
         // 启用自动滚动
@@ -83,9 +84,11 @@ public class ClientFrame extends JPanel {
         add(scrollPane, BorderLayout.CENTER);
 
         // 设置按钮监听器
+        inputField.addActionListener(e->sendMessage());//监听输入框
+        uploadButton.addActionListener(e -> upload());//监听upload
+        shareButton.addActionListener(e -> share());//监听share
         connectButton.addActionListener(e -> connectToServer());
         sendButton.addActionListener(e -> sendMessage());
-        uploadButton.addActionListener(e -> upload());
 
         // 初始化时禁用发送按钮，直到成功连接
         sendButton.setEnabled(false);
@@ -152,13 +155,6 @@ public class ClientFrame extends JPanel {
                     appendToDisplayArea("上传失败: " + ex.getMessage()  + "\n");
                 }
             }).start();
-            try {
-                //通过组播广播发送文件
-                new FileSender(selectedFile.toString());
-                System.out.println("File  sent successfully.");
-            } catch (IOException e) {
-                System.err.println("Error  sending file: " + e.getMessage());
-            }
         }
     }
 
@@ -223,8 +219,12 @@ public class ClientFrame extends JPanel {
             appendToDisplayArea("Sending: " + textToSend + "\n");
             inputField.setText("");
             if (textToSend.contains("#")) {
-                client.checkmessage(textToSend);
-            } else {
+                client.checkMessage(textToSend);
+            }else if (textToSend.equals("cls")){
+                displayArea.setText("");
+                return;
+            }
+            else {
                 client.sendMessage(textToSend);
             }
         }
