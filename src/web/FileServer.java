@@ -20,7 +20,7 @@ public class FileServer {
             "http://localhost", "https://your-domain.com","http://127.0.0.1"
     ));
 
-    public static void main(String[] args) throws IOException {
+    public static void Filemain() throws IOException {
         // 初始化上传目录
         Files.createDirectories(Paths.get(UPLOAD_DIR));
 
@@ -67,7 +67,7 @@ public class FileServer {
             case "/download":
                 handleDownload(exchange);
                 break;
-            case"/index":
+            case"/":
                 handleIndex(exchange);
             default:
                 sendError(exchange, 404, "接口不存在");
@@ -190,12 +190,18 @@ public class FileServer {
         }
 
         // 文件保存逻辑
-        try (InputStream is = exchange.getRequestBody();
-             OutputStream os = new FileOutputStream(UPLOAD_DIR + "/" + fileName)) {
-            byte[] buffer = new byte[4096];
-            int bytesRead;
-            while ((bytesRead = is.read(buffer))  != -1) {
-                os.write(buffer,  0, bytesRead);
+        // 获取Content-Type头
+        String contentType = exchange.getRequestHeaders().getFirst("Content-Type");
+
+        try (InputStream is = exchange.getRequestBody())  {
+            MultipartParser parser = new MultipartParser(is, contentType);
+            Map<String, byte[]> parts = parser.parse();
+
+
+            byte[] fileContent = parts.get("content");
+
+            try (OutputStream os = new FileOutputStream(UPLOAD_DIR + "/" + fileName)) {
+                os.write(fileContent);
             }
             sendResponse(exchange, 200, "上传成功");
         } catch (Exception e) {

@@ -2,6 +2,7 @@ package sample.Server;
 
 import sample.AllNeed.FileInfo;
 import sample.AllNeed.FileListManager;
+import web.FileServer;
 
 import javax.swing.*;
 import java.io.*;
