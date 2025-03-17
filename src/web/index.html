@@ -259,10 +259,15 @@
 
     // 文件下载（支持中文文件名）
     function downloadFile(filename) {
+        // 修复双重编码问题（escapeHTML可能产生副作用）
+        const safeName = encodeURIComponent(filename);
         const link = document.createElement('a');
-        link.href  = `${API_BASE}/download?file=${filename}`;
-        link.download  = decodeURIComponent(filename);
+        link.href  = `${API_BASE}/download?file=${safeName}`;
+        link.download  = filename; // 直接使用原始文件名
+        link.style.display  = 'none';
+        document.body.appendChild(link);
         link.click();
+        document.body.removeChild(link);
     }
 
     // 网页列表刷新策略，初始化刷新+每隔5秒刷新

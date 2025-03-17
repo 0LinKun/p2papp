@@ -122,7 +122,8 @@ public class Server {
                                 "|exit  |exit 退出连接|\n " +
                                 "|fl    |fileList  列出服务器存在文件|\n " +
                                 "|share  |to share file all users组播分享文件|\n " +
-                                "|upload  |upload file to server上传文件到服务器|\n");
+                                "|upload  |upload file to server上传文件到服务器|\n"+
+                                "|web服务 输入服务器ip：8082端口即可访问web端上传下载文件|\n");
                     }else if (line.equals("share")){
                         broadcastToClients("share");
                     }

@@ -30,8 +30,35 @@ public class ClientFrame extends JPanel {
     private static final int SERVER_PORT = 10001; // 假设服务器端口是固定的
     String ip;
 
+    // 在类成员变量区新增组件声明
+    private JPanel onlinePanel;      // 右侧在线用户面板
+    private JTextArea onlineArea;    // 在线人数显示框
+    private JButton refreshButton;   // 刷新按钮
+
     public ClientFrame() {
         setLayout(new BorderLayout());
+
+        // ▶▶ 创建右侧在线用户面板 ▶▶
+        onlinePanel = new JPanel(new BorderLayout());
+        onlinePanel.setPreferredSize(new Dimension(200, 0)); // 设置固定宽度
+        onlinePanel.setBorder(BorderFactory.createTitledBorder(" 在线用户"));
+
+        // 刷新按钮
+        refreshButton = new JButton("刷新");
+        refreshButton.addActionListener(e -> updateOnlineUsers()); // 绑定刷新事件
+
+        // 在线用户显示区域
+        onlineArea = new JTextArea();
+        onlineArea.setEditable(false);
+        onlineArea.setFont(new Font("微软雅黑", Font.PLAIN, 14));
+        JScrollPane onlineScroll = new JScrollPane(onlineArea);
+
+        // 组装右侧面板
+        onlinePanel.add(refreshButton, BorderLayout.NORTH);
+        onlinePanel.add(onlineScroll, BorderLayout.CENTER);
+
+        // ▶▶ 将右侧面板添加到主界面 ▶▶
+        add(onlinePanel, BorderLayout.EAST);
 
         // 创建显示区域
         displayArea = new JTextArea();
@@ -60,20 +87,20 @@ public class ClientFrame extends JPanel {
 
         add(connectionPanel, BorderLayout.NORTH);
         // 在connectionPanel增加上传按钮
-         uploadButton = new JButton("Upload");
+        uploadButton = new JButton("Upload");
         connectionPanel.add(uploadButton);  // 添加到现有的连接面板
 
-        
+
         // 在connectionPanel增加分享按钮
         shareButton = new JButton("Share");
         connectionPanel.add(shareButton);  // 添加到现有的连接面板
 
-        
+
         // 在inputPanel增加进度显示
-         progressBar = new JProgressBar();
+        progressBar = new JProgressBar();
         progressBar.setStringPainted(true);
-        progressBar.setPreferredSize(new  Dimension(300, 25));
-        inputPanel.add(progressBar,  BorderLayout.NORTH);
+        progressBar.setPreferredSize(new Dimension(300, 25));
+        inputPanel.add(progressBar, BorderLayout.NORTH);
 
         // 启用自动滚动
         DefaultCaret caret = (DefaultCaret) displayArea.getCaret();
@@ -84,7 +111,7 @@ public class ClientFrame extends JPanel {
         add(scrollPane, BorderLayout.CENTER);
 
         // 设置按钮监听器
-        inputField.addActionListener(e->sendMessage());//监听输入框
+        inputField.addActionListener(e -> sendMessage());//监听输入框
         uploadButton.addActionListener(e -> upload());//监听upload
         shareButton.addActionListener(e -> share());//监听share
         connectButton.addActionListener(e -> connectToServer());
@@ -96,10 +123,14 @@ public class ClientFrame extends JPanel {
 
     }
 
+    private void updateOnlineUsers() {
+        client.sendMessage("ls");
+    }
+
     private void share() {
         client.sendMessage("share");
         JFileChooser fileChooser = new JFileChooser();
-        if (fileChooser.showOpenDialog(this)  == JFileChooser.APPROVE_OPTION) {
+        if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
             File selectedFile = fileChooser.getSelectedFile();
             new Thread(() -> {
                 try {
@@ -107,7 +138,7 @@ public class ClientFrame extends JPanel {
                     new FileSender(selectedFile.toString());
                     System.out.println("File  share successfully.");
                 } catch (IOException ex) {
-                    appendToDisplayArea("share失败: " + ex.getMessage()  + "\n");
+                    appendToDisplayArea("share失败: " + ex.getMessage() + "\n");
                 }
             }).start();
 
@@ -116,7 +147,7 @@ public class ClientFrame extends JPanel {
 
     private void upload() {
         JFileChooser fileChooser = new JFileChooser();
-        if (fileChooser.showOpenDialog(this)  == JFileChooser.APPROVE_OPTION) {
+        if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
             File selectedFile = fileChooser.getSelectedFile();
             new Thread(() -> {
                 try {
@@ -125,34 +156,34 @@ public class ClientFrame extends JPanel {
                     FileInfo fileInfo = FileListManager.generateFileInfo(selectedFile.toPath());
 
                     //发送文件名
-                    client.sendBinaryData(fileInfo.getFileName().getBytes(),fileInfo.getFileName().getBytes().length,filesock);
+                    client.sendBinaryData(fileInfo.getFileName().getBytes(), fileInfo.getFileName().getBytes().length, filesock);
                     // 发送元数据
-                    client.sendMessage("UPLOAD_META#"  + fileInfo.getFileName()
+                    client.sendMessage("UPLOAD_META#" + fileInfo.getFileName()
                             + "#" + fileInfo.getFileSize()
                             + "#" + fileInfo.getFileHash());
 
                     // 分块发送
-                    try (InputStream is = Files.newInputStream(selectedFile.toPath()))  {
+                    try (InputStream is = Files.newInputStream(selectedFile.toPath())) {
                         byte[] buffer = new byte[10 * 1024 * 1024]; // 10MB分块
                         int bytesRead;
                         int chunkIndex = 0;
 
-                        while ((bytesRead = is.read(buffer))  > 0) {
+                        while ((bytesRead = is.read(buffer)) > 0) {
                             String chunkHash = FileListManager.calculateHash(buffer, bytesRead);
-                            client.sendMessage("UPLOAD_CHUNK#"  + chunkIndex
+                            client.sendMessage("UPLOAD_CHUNK#" + chunkIndex
                                     + "#" + bytesRead
                                     + "#" + chunkHash);
-                            client.sendBinaryData(buffer,  bytesRead,filesock); // 发送二进制数据
+                            client.sendBinaryData(buffer, bytesRead, filesock); // 发送二进制数据
                             chunkIndex++;
 
                             // 更新进度
                             int progress = (int) ((chunkIndex * 10 * 1024 * 1024 * 100)
                                     / selectedFile.length());
-                            SwingUtilities.invokeLater(()  -> progressBar.setValue(progress));
+                            SwingUtilities.invokeLater(() -> progressBar.setValue(progress));
                         }
                     }
                 } catch (IOException | NoSuchAlgorithmException ex) {
-                    appendToDisplayArea("上传失败: " + ex.getMessage()  + "\n");
+                    appendToDisplayArea("上传失败: " + ex.getMessage() + "\n");
                 }
             }).start();
         }
@@ -161,7 +192,7 @@ public class ClientFrame extends JPanel {
 
     private void connectToServer() {
         if (!isConnected) {
-             ip = ipField.getText().trim();
+            ip = ipField.getText().trim();
 
             if (ip.isEmpty()) {
                 appendToDisplayArea("Server IP cannot be empty.\n");
@@ -220,11 +251,10 @@ public class ClientFrame extends JPanel {
             inputField.setText("");
             if (textToSend.contains("#")) {
                 client.checkMessage(textToSend);
-            }else if (textToSend.equals("cls")){
+            } else if (textToSend.equals("cls")) {
                 displayArea.setText("");
                 return;
-            }
-            else {
+            } else {
                 client.sendMessage(textToSend);
             }
         }

@@ -12,6 +12,7 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 public class FileServer {
     private static final int PORT = 8082;
@@ -211,27 +212,61 @@ public class FileServer {
 
     // 文件下载接口
     private static void handleDownload(HttpExchange exchange) throws IOException {
-        String fileName = exchange.getRequestURI().getQuery().split("=")[1];
-        Path filePath = Paths.get(UPLOAD_DIR,  fileName);
-
-        if (!Files.exists(filePath))  {
-            sendError(exchange, 404, "文件不存在");
-            return;
-        }
-
-        exchange.getResponseHeaders().add("Content-Type",  "application/octet-stream");
-        exchange.getResponseHeaders().add("Content-Disposition",
-                "attachment; filename=\"" + URLEncoder.encode(fileName,  "UTF-8") + "\"");
-
-        exchange.sendResponseHeaders(200,  Files.size(filePath));
-        try (OutputStream os = exchange.getResponseBody();
-             InputStream is = Files.newInputStream(filePath))  {
-            byte[] buffer = new byte[4096];
-            int bytesRead;
-            while ((bytesRead = is.read(buffer))  != -1) {
-                os.write(buffer,  0, bytesRead);
+        try {
+            // 1. 验证请求方法
+            if (!"GET".equalsIgnoreCase(exchange.getRequestMethod()))  {
+                sendError(exchange, 405, "仅支持GET方法");
+                return;
             }
+
+            // 2. 解析文件名参数
+            String query = exchange.getRequestURI().getQuery();
+            Map<String, String> params = parseQuery(query);
+            String fileName = params.get("file");
+
+            // 3. 安全解码与校验
+            fileName = URLDecoder.decode(fileName,  StandardCharsets.UTF_8.name())
+                    .replace("/", "_")       // 防止路径遍历
+                    .replace("\\", "_")      // 过滤非法字符
+                    .replace("\0", "");      // 空字符过滤
+
+            Path filePath = Paths.get(UPLOAD_DIR,  fileName).normalize();
+
+            // 4. 文件存在性检查
+            if (!Files.exists(filePath)  || Files.isDirectory(filePath))  {
+                sendError(exchange, 404, "文件不存在");
+                return;
+            }
+
+            // 5. 设置响应头
+            exchange.getResponseHeaders().add("Content-Type",
+                    Files.probeContentType(filePath)  + "; charset=utf-8");
+            exchange.getResponseHeaders().add("Content-Disposition",
+                    "attachment; filename=\"" + URLEncoder.encode(fileName,  "UTF-8") + "\"");
+            exchange.sendResponseHeaders(200,  Files.size(filePath));
+
+            // 6. 流式传输文件
+            try (OutputStream os = exchange.getResponseBody();
+                 InputStream is = Files.newInputStream(filePath))  {
+                byte[] buffer = new byte[4096];
+                int bytesRead;
+                while ((bytesRead = is.read(buffer))  != -1) {
+                    os.write(buffer,  0, bytesRead);
+                }
+            }
+        } catch (Exception e) {
+            sendError(exchange, 500, "下载失败: " + e.getMessage());
         }
+    }
+
+    // 辅助方法：解析URL查询参数
+    private static Map<String, String> parseQuery(String query) {
+        return Arrays.stream(query.split("&"))
+                .map(p -> p.split("="))
+                .collect(Collectors.toMap(
+                        arr -> arr[0],
+                        arr -> arr.length  > 1 ? arr[1] : ""
+                ));
     }
 
     // 统一响应工具
