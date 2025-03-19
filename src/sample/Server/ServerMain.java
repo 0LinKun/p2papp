@@ -22,6 +22,7 @@ public class ServerMain extends JFrame {
         add(mainPanel);
     }
 
+
     public static void main(String[] args) {
         //启动web服务
                 FileServer fileserver= new FileServer();

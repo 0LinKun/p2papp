@@ -8,9 +8,11 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
+
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.logging.*;
+import java.util.logging.Formatter;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -18,17 +20,47 @@ import com.google.gson.Gson;
 import org.apache.commons.fileupload.MultipartStream;
 
 public class FileServer {
+
     private static final int PORT = 8082;
     private static final String UPLOAD_DIR = "file";
     private static final Set<String> ALLOWED_ORIGINS = new HashSet<>(Arrays.asList(
             "http://localhost", "https://your-domain.com","http://127.0.0.1"
     ));
-
+    // 新增静态日志对象
+    private static final Logger logger = Logger.getLogger(FileServer.class.getName());
     public static void Filemain() throws IOException {
         // 初始化上传目录
         Files.createDirectories(Paths.get(UPLOAD_DIR));
 
         HttpServer server = HttpServer.create(new  InetSocketAddress(PORT), 0);
+        // 新增日志目录创建
+        Files.createDirectories(Paths.get("logs"));
+
+        // 配置日志处理器（自动滚动）
+        FileHandler fileHandler = new FileHandler(
+                "logs/FileServer_%g.log",   // 文件名模式
+                1024 * 1024,           // 单文件最大1MB
+                5,                     // 保留5个历史文件
+                true                   // 追加模式
+        );
+
+        // 自定义日志格式（时间+IP+文件名）
+        fileHandler.setFormatter(new  Formatter() {
+            @Override
+            public String format(LogRecord record) {
+                String action = record.getMessage().startsWith("[ 下载]") ? "DOWNLOAD" : "UPLOAD";
+                String filename = record.getMessage().replace("[ 下载] ", "");
+                return String.format("[%1$tF  %1$tT] %2$s | %3$-7s | %4$s%n",
+                        new Date(record.getMillis()),
+                        record.getParameters()[0],  // IP地址
+                        action,                    // 操作类型
+                        filename                   // 文件名
+                );
+            }
+        });
+
+        logger.addHandler(fileHandler);
+        logger.setUseParentHandlers(false);  // 禁用控制台输出
 
         // 全局请求处理器
         server.createContext("/",  exchange -> {
@@ -195,7 +227,9 @@ public class FileServer {
                             matcher.group(1),
                             StandardCharsets.UTF_8.name()
                     );
-
+                        // 记录日志（核心新增点）
+                    String clientIP = exchange.getRemoteAddress().getAddress().getHostAddress();
+                    logger.log(Level.INFO,  fileName, new Object[]{clientIP});
                     // 直接保存原始文件名
                     Path filePath = uploadDir.resolve(fileName).normalize();
 
@@ -220,28 +254,6 @@ public class FileServer {
             sendResponse(exchange, 500, "Upload failed: " + e.getMessage());
         }
     }
-
-
-
-
-    // 辅助方法：文件有效性验证
-    private static void validateFileIntegrity(Path file) throws IOException {
-        if (Files.size(file)  == 0) {
-            Files.delete(file);
-            throw new IOException("Empty file");
-        }
-
-        // 示例：校验PNG文件头
-        if (file.getFileName().toString().toLowerCase().endsWith(".png"))  {
-            byte[] header = Files.readAllBytes(file);
-            if (header.length  < 8 || !(header[0] == (byte)0x89 && header[1] == (byte)0x50
-                    && header[2] == (byte)0x4E && header[3] == (byte)0x47)) {
-                Files.delete(file);
-                throw new IOException("Invalid PNG file");
-            }
-        }
-    }
-
 
 
     // 文件下载接口
@@ -280,6 +292,10 @@ public class FileServer {
                 sendResponse(exchange, 404, "File not found");
                 return;
             }
+
+            //  新增日志记录
+            String clientIP = exchange.getRemoteAddress().getAddress().getHostAddress();
+            logger.log(Level.INFO,  "[下载] " + filename, new Object[]{clientIP});
 
             // 设置响应头
             exchange.getResponseHeaders().add("Content-Type",
