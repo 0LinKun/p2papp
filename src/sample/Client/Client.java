@@ -1,16 +1,25 @@
 package sample.Client;
 
+import com.google.gson.JsonSyntaxException;
+import com.google.gson.reflect.TypeToken;
+import sample.Server.IpAddressFetcher;
 import sample.Server.Server;
 
 import java.io.*;
+import java.lang.reflect.Type;
 import java.net.InetAddress;
 import java.net.Socket;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import javax.swing.*;
+import com.google.gson.Gson;
 
 public class Client implements Runnable {
 
+    private final JTextArea onlineArea;
     private Socket socket;
     private BufferedReader in;
     private PrintWriter out;
@@ -23,9 +32,11 @@ public class Client implements Runnable {
     private final String host;
     private volatile boolean connected = false;
 
-    public Client(String host, JTextArea displayArea) {
+    public Client(String host, JTextArea displayArea,JTextArea onlineArea) {
         this.host = host;
         this.displayArea = displayArea;
+        this.onlineArea=onlineArea;
+        IpAddressFetcher.IpAddress(displayArea);
         new Thread(this).start();
     }
 
@@ -51,8 +62,9 @@ public class Client implements Runnable {
             }
         }
     }
+
     // 在Client类中添加：
-    public synchronized void sendBinaryData(byte[] buffer, int bytesRead,Socket filesock)
+    public synchronized void sendBinaryData(byte[] buffer, int bytesRead, Socket filesock)
             throws IOException {
 
         OutputStream os = filesock.getOutputStream();
@@ -63,9 +75,10 @@ public class Client implements Runnable {
         os.write(header.array());
 
         // 发送实际数据
-        os.write(buffer,  0, bytesRead);
+        os.write(buffer, 0, bytesRead);
         os.flush();
     }
+
     @Override
     public void run() {
         try {
@@ -92,14 +105,16 @@ public class Client implements Runnable {
                         String response = in.readLine();
                         if (response == null || response.equalsIgnoreCase("exit")) {
                             break;
-                        }else if (response.equals("share")){
-                            if (FileState==false) {
-                                FileState=true;
+                        } else if (response.equals("share")) {
+                            if (FileState == false) {
+                                FileState = true;
                                 new FileReceiver().start();
                             }
+                        }else if(ListenUserlist(response)){
+                            continue;
                         }
+
                         SwingUtilities.invokeLater(() -> {
-                            //displayArea.append(socket.getInetAddress().toString()+":"+socket.getPort()+"\n");
                             displayArea.append(response + "\n");
                         });
                     } catch (IOException e) {
@@ -119,8 +134,50 @@ public class Client implements Runnable {
         }
     }
 
-    public synchronized void sendMessage(String message) {
+    // 1. 创建对应的用户模型类
+    class User {
+        private String username;
+        private int id;
 
+        // 必须包含getter方法
+        public String getUsername() { return username; }
+    }
+
+    // 2. 修改解析代码
+    private boolean ListenUserlist(String response) {
+        if (response.equals("USER_LIST"))  {
+            try {
+                // 读取数据长度
+                int length = Integer.parseInt(in.readLine());
+
+                // 读取JSON数据
+                char[] buffer = new char[length];
+                in.read(buffer,  0, length);
+                String jsonData = new String(buffer);
+
+                // 解析JSON数据
+                Gson gson = new Gson();
+                Type type = new TypeToken<ArrayList<HashMap<String, String>>>(){}.getType();
+                ArrayList<HashMap<String, String>> userList = gson.fromJson(jsonData,  type);
+
+                // 更新在线用户显示
+                SwingUtilities.invokeLater(()  -> {
+                    onlineArea.setText("");
+                    for (HashMap<String, String> user : userList) {
+                        String line = String.format("%s:%s\n",  user.get("IP"), user.get("PORT"));
+                        onlineArea.append(line);
+                    }
+                });
+                return true;
+            } catch (Exception e) {
+                e.printStackTrace();
+                return false;
+            }
+        }
+        return false;
+    }
+
+    public synchronized void sendMessage(String message) {
         out.println(message);
     }
 

@@ -3,297 +3,243 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>文件管理系统</title>
+    <title>文件管理中心</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap"  rel="stylesheet">
+    <style>
+        :root {
+            --primary: #4A90E2;
+            --background: #f5f7fb;
+        }
 
+        * {
+            box-sizing: border-box;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            margin: 0;
+            padding: 2rem;
+            background: var(--background);
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        /* 上传区域 */
+        .upload-box {
+            border: 2px dashed var(--primary);
+            border-radius: 12px;
+            padding: 2rem;
+            text-align: center;
+            margin-bottom: 2rem;
+            transition: 0.3s;
+        }
+
+        .upload-box.dragover  {
+            background: rgba(74, 144, 226, 0.1);
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        .upload-btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 0.8rem 1.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .upload-btn:hover {
+            transform: scale(1.05);
+        }
+
+        /* 文件列表 */
+        .file-list {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            padding: 1rem;
+            border-bottom: 1px solid #eee;
+        }
+
+        .file-item:last-child {
+            border-bottom: none;
+        }
+
+        .file-name {
+            flex: 1;
+            color: #333;
+            margin-right: 1rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .download-btn {
+            background: none;
+            border: 1px solid var(--primary);
+            color: var(--primary);
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+        }.search-box {
+             display: flex;
+             gap: 10px;
+             margin-bottom: 1.5rem;
+         }
+        #searchInput {
+            flex: 1;
+            padding: 0.8rem;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        .search-box button {
+            background: #ff4444;
+            color: white;
+            border: none;
+            width: 40px;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+    </style>
 </head>
 <body>
 <div class="container">
-    <h1>文件传输助手</h1>
-    <p>选择文件并点击上传，轻松完成文件传输。</p>
-    <div class="file-box">
-        <input type="file" id="fileInput" class="file-input">
-        <label for="fileInput" class="custom-upload-btn">选择文件</label>
-        <button onclick="uploadFile()" class="custom-upload-btn">上传文件</button>
+    <!-- 上传区域 -->
+    <div class="upload-box" id="dropZone">
+        <input type="file" id="fileInput" multiple>
+        <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
+            选择文件 或 拖拽至此
+        </button>
+        <div id="progressBar" style="display:none; margin-top:1rem;">
+            <div style="height:4px; background:#e0e0e0; border-radius:2px;">
+                <div id="progress" style="width:0%; height:100%; background:var(--primary); transition:0.3s;"></div>
+            </div>
+        </div>
     </div>
-    <div class="status-box">
-        <p id="statusText">等待文件选择...</p>
-        <ul id="fileList"></ul>
+    <div class="search-box">
+        <input type="text" id="searchInput" placeholder="输入文件名关键词（支持模糊匹配）"
+               oninput="filterFiles(this.value)">
+        <button onclick="clearSearch()">×</button>
     </div>
+    <!-- 文件列表 -->
+    <div class="file-list" id="fileList"></div>
 </div>
-<style>
-    /* 重置默认样式 */
-    * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-    }
 
-    /* 页面背景与字体 */
-    body {
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        background: linear-gradient(135deg, #6a11cb, #2575fc);
-        color: #fff;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        height: 100vh;
-        padding: 20px;
-    }
-
-    /* 容器样式 */
-    .container {
-        background: rgba(255, 255, 255, 0.1);
-        backdrop-filter: blur(10px);
-        border-radius: 15px;
-        padding: 30px;
-        max-width: 500px;
-        width: 100%;
-        text-align: center;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-    }
-
-    /* 标题样式 */
-    h1 {
-        font-size: 2.5rem;
-        margin-bottom: 10px;
-    }
-
-    /* 描述文字样式 */
-    p {
-        font-size: 1rem;
-        margin-bottom: 20px;
-        color: #e0e0e0;
-    }
-
-    /* 文件选择框样式 */
-    .file-box {
-        display: flex;
-        justify-content: space-between;
-        gap: 10px;
-        margin-bottom: 20px;
-    }
-
-    .file-input {
-        display: none;
-    }
-
-    .file-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-family: 'Segoe UI', system-ui;
-    }
-
-    .file-item {
-        display: grid;
-        grid-template-columns: minmax(200px, 1fr) 120px 100px;
-        align-items: center;
-        padding: 12px 20px;
-        border-bottom: 1px solid #e0e0e0;
-        transition: background 0.2s ease;
-    }
-
-    .filename {
-        color: #2d3748;
-        font-weight: 500;
-        cursor: pointer;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
-    .filename:hover {
-        color: #4299e1;
-        text-decoration: underline;
-    }
-
-    .file-meta {
-        display: flex;
-        gap: 15px;
-        color: #718096;
-    }
-
-    .file-size::after {
-        content: " • ";
-        margin-left: 10px;
-        color: #cbd5e0;
-    }
-
-    @media (max-width: 768px) {
-        .file-item {
-            grid-template-columns: 1fr;
-            gap: 8px;
-        }
-
-        .file-meta {
-            justify-content: space-between;
-        }
-    }
-
-    .custom-upload-btn {
-        background: #ff416c;
-        color: #fff;
-        padding: 10px 20px;
-        border: none;
-        border-radius: 8px;
-        cursor: pointer;
-        transition: background 0.3s ease;
-    }
-
-    .custom-upload-btn:hover {
-        background: #ff4b2b;
-    }
-
-    /* 状态框样式 */
-    .status-box {
-        background: rgba(255, 255, 255, 0.1);
-        padding: 15px;
-        border-radius: 8px;
-        font-size: 0.9rem;
-        color: #e0e0e0;}
-
-</style>
 <script>
-    // 获取DOM元素
-    const fileInput = document.getElementById('fileInput');
-    const statusText = document.getElementById('statusText');
+    // 初始化加载文件列表
+    let refreshInterval = setInterval(loadFileList, 5000);
 
-    // 监听文件选择事件
-    fileInput.addEventListener('change',  (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            statusText.textContent  = `已选择文件：${file.name}`;
-        } else {
-            statusText.textContent  = '未选择文件';
+    // 文件列表加载函数
+    async function loadFileList() {
+        try {
+            const res = await fetch('/list');
+            const files = await res.json();
+            renderFileList(files);
+        } catch (e) {
+            console.error(' 加载失败:', e);
         }
-    })
-    // 智能环境适配（开发环境→生产环境自动切换）
-    const API_BASE = (() => {
-        const isLocal = window.location.hostname  === 'localhost' ||
-            window.location.hostname  === '127.0.0.1';
-        return isLocal ? 'http://localhost:8082' : window.location.origin;
-    })();
+    }
+    let allFiles = []; // 全局缓存文件列表
 
-    // 安全字符转义（防御XSS攻击）
-    function escapeHTML(str) {
-        const div = document.createElement('div');
-        div.textContent  = str;
-        return div.innerHTML;
+    // 修改原loadFileList函数
+    async function loadFileList() {
+        const res = await fetch('/list');
+        allFiles = await res.json();
+        filterFiles(document.getElementById('searchInput').value);
     }
 
-    async function refreshFileList() {
-        const fileListContainer = document.getElementById("fileList");
-        try {
-            // 显示加载状态
-            fileListContainer.innerHTML  = '<div class="loading">加载文件列表中...</div>';
+    // 模糊搜索核心逻辑（支持*通配符）
+    function filterFiles(keyword) {
+        const normalizedKeyword = keyword.trim().toLowerCase().replace(/\*/g,  '.*');
+        const regex = new RegExp(normalizedKeyword, 'i');
+        const filtered = allFiles.filter(file  => regex.test(file.toLowerCase()));
+        renderFileList(filtered);
+    }
 
-            // 发送请求并处理超时（5秒限制）
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(),  5000);
+    function clearSearch() {
+        document.getElementById('searchInput').value  = '';
+        filterFiles('');
+    }
+    // 渲染文件列表
+    function renderFileList(files) {
+        const container = document.getElementById('fileList');
+        container.innerHTML  = files.map(file  => `
+                <div class="file-item">
+                    <span class="file-name">${file}</span>
+                    <button class="download-btn" onclick="downloadFile('${file}')">
+                        下载
+                    </button>
+                </div>
+            `).join('');
+    }
 
-            const res = await fetch(`${API_BASE}/list`, {
-                signal: controller.signal,
-                headers: { 'Accept': 'application/json' }
-            });
-            clearTimeout(timeoutId);
+    // 文件上传处理
+    document.getElementById('fileInput').addEventListener('change',  async (e) => {
+        const files = e.target.files;
+        if (files.length  === 0) return;
 
-            // 处理 HTTP 错误状态
-            if (!res.ok)  throw new Error(`[${res.status}]  ${res.statusText}`);
+        const progress = document.getElementById('progress');
+        document.getElementById('progressBar').style.display  = 'block';
 
-            // 解析 JSON 并渲染列表
-            const { files } = await res.json();
-            if (files.length  === 0) {
-                fileListContainer.innerHTML  = '<div class="empty">暂无上传文件</div>';
-                return;
+        for (const file of files) {
+            const formData = new FormData();
+            formData.append('file',  file);
+
+            try {
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST',  '/upload');
+
+                xhr.upload.onprogress  = (e) => {
+                    const percent = Math.round((e.loaded  / e.total)  * 100);
+                    progress.style.width  = percent + '%';
+                };
+
+                xhr.onload  = () => {
+                    if (xhr.status  === 200) {
+                        loadFileList();
+                    }
+                };
+
+                xhr.send(formData);
+            } catch (error) {
+                alert(`上传失败: ${error.message}`);
             }
-
-            // 动态生成列表项（含安全转义）
-            const listItems = files.map(filename  => `
-            <ul class="file-table">
-    <li class="file-item">
-        <span class="filename"
-              onclick="downloadFile('${encodeURIComponent(escapeHTML(filename))}')"
-              title="点击下载文件">
-            ${escapeHTML(filename)}
-        </span>
-    </li>
-</ul>
-        `).join('');
-
-            fileListContainer.innerHTML  = `<ul>${listItems}</ul>`;
-        } catch (error) {
-            // 分类错误提示
-            const errorMsg = error.name  === 'AbortError' ?
-                '请求超时，请检查网络连接' :
-                `加载失败: ${error.message}`;
-            fileListContainer.innerHTML  = `<div class="error">${errorMsg}</div>`;
         }
-    }
+    });
 
-    // 文件上传（支持进度显示）
-    async function uploadFile() {
-        const fileInput = document.getElementById('fileInput');
-        if (!fileInput.files.length)  return alert('请先选择文件');
-
-        const file = fileInput.files[0];
-        const formData = new FormData();
-        // 显式指定文件名参数
-        formData.append('file',  file, encodeURIComponent(file.name));
-
-        try {
-            const res = await fetch(`${API_BASE}/upload`, {
-                method: 'POST',
-                body: formData,
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                    // 新增文件名请求头
-                    'X-File-Name': encodeURIComponent(file.name)
-                }
-            });
-            if (!res.ok)  throw new Error(await res.text());
-            alert('上传成功');
-            refreshFileList();
-        } catch (error) {
-            alert(`上传失败: ${error.message}`);
-        }
-    }
-
-    // 文件下载（支持中文文件名）
+    // 文件下载函数
     function downloadFile(filename) {
-        // 修复双重编码问题（escapeHTML可能产生副作用）
-        const safeName = encodeURIComponent(filename);
-        const link = document.createElement('a');
-        link.href  = `${API_BASE}/download?file=${safeName}`;
-        link.download  = filename; // 直接使用原始文件名
-        link.style.display  = 'none';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        window.location.href  = `/download?file=${encodeURIComponent(filename)}`;
     }
 
-    // 网页列表刷新策略，初始化刷新+每隔5秒刷新
-    let refreshInterval;
-    // 初始化定时刷新
-    function initAutoRefresh() {
-        // 立即加载第一次
-        refreshFileList();
+    // 拖拽上传支持
+    const dropZone = document.getElementById('dropZone');
+    dropZone.addEventListener('dragover',  (e) => {
+        e.preventDefault();
+        dropZone.classList.add('dragover');
+    });
 
-        // 启动5秒定时器
-        refreshInterval = setInterval(() => {
-            refreshFileList();
-        }, 5000);
+    dropZone.addEventListener('dragleave',  () => {
+        dropZone.classList.remove('dragover');
+    });
 
-        // 页面隐藏时暂停刷新
-        document.addEventListener('visibilitychange',  () => {
-            if (document.hidden)  {
-                clearInterval(refreshInterval);
-            } else {
-                refreshInterval = setInterval(refreshFileList, 5000);
-            }
-        });
-    }
-    // DOM加载后初始化
-    document.addEventListener('DOMContentLoaded',  initAutoRefresh);
-
+    dropZone.addEventListener('drop',  (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+        document.getElementById('fileInput').files  = e.dataTransfer.files;
+    });
 </script>
 </body>
 </html>

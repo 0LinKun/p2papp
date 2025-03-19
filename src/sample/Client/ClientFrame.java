@@ -124,7 +124,7 @@ public class ClientFrame extends JPanel {
     }
 
     private void updateOnlineUsers() {
-        client.sendMessage("ls");
+        client.sendMessage("updateOnlineUsers");
     }
 
     private void share() {
@@ -205,7 +205,7 @@ public class ClientFrame extends JPanel {
             // 在新的线程中尝试连接
             new Thread(() -> {
                 try {
-                    client = new Client(ip, displayArea);
+                    client = new Client(ip, displayArea,onlineArea);
                     //System.out.println("clientframe"+Thread.currentThread());
                     Thread.sleep(100);
                     // 检查是否成功连接,等待connected变true

@@ -8,11 +8,14 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import com.google.gson.Gson;
+import org.apache.commons.fileupload.MultipartStream;
 
 public class FileServer {
     private static final int PORT = 8082;
@@ -146,119 +149,178 @@ public class FileServer {
     }
 
     // 文件上传接口
+    // 文件上传处理逻辑
     private static void handleUpload(HttpExchange exchange) throws IOException {
-        // 验证请求方法
-        if (!"POST".equals(exchange.getRequestMethod()))  {
-            sendError(exchange, 405, "方法不允许");
+        // 仅处理POST请求
+        if (!"POST".equalsIgnoreCase(exchange.getRequestMethod()))  {
+            sendResponse(exchange, 405, "Method Not Allowed");
             return;
         }
 
-        // 获取原始文件名（双重保障方案）
-        String fileName = null;
-        try {
-            // 方案1：从请求头获取
-            String disposition = exchange.getRequestHeaders().getFirst("Content-Disposition");
-            if (disposition != null) {
-                Pattern pattern = Pattern.compile("filename\\*?=\"?(.*?)\"?$");
-                Matcher matcher = pattern.matcher(disposition);
-                if (matcher.find())  {
-                    fileName = URLDecoder.decode(matcher.group(1),  StandardCharsets.UTF_8.name());
-                }
-            }
-
-            // 方案2：从自定义请求头获取（前端新增的X-File-Name）
-            if (fileName == null) {
-                fileName = exchange.getRequestHeaders().getFirst("X-File-Name");
-                if (fileName != null) {
-                    fileName = URLDecoder.decode(fileName,  StandardCharsets.UTF_8.name());
-                }
-            }
-
-//            // 安全过滤
-//            fileName = fileName
-//                    .replaceAll("[\\\\/]", "_")  // 匹配 \ 或 /
-//                    .replaceAll("^\\.+", "")     // 过滤开头点号
-//                    .replace("\0", "")           // 替换空字符
-//                    .replaceAll("(?i)[^\\w\\-_. ]", ""); // 新增特殊字符过滤
-
-            // 最终文件名校验
-            if (fileName == null || fileName.isEmpty())  {
-                throw new IllegalArgumentException("无效的文件名");
-            }
-        } catch (Exception e) {
-            sendError(exchange, 400, "文件名解析失败");
-            return;
-        }
-
-        // 文件保存逻辑
-        // 获取Content-Type头
+        // 解析Content-Type获取boundary
         String contentType = exchange.getRequestHeaders().getFirst("Content-Type");
+        if (contentType == null || !contentType.startsWith("multipart/form-data"))  {
+            sendResponse(exchange, 400, "Invalid Content-Type");
+            return;
+        }
+
+        // 提取boundary参数
+        String boundary = contentType.split("boundary=")[1];
+        Path uploadDir = Paths.get(UPLOAD_DIR);
+        Files.createDirectories(uploadDir);
 
         try (InputStream is = exchange.getRequestBody())  {
-            MultipartParser parser = new MultipartParser(is, contentType);
-            Map<String, byte[]> parts = parser.parse();
+            // 使用Apache Commons FileUpload的MultipartStream（需添加依赖）
+            MultipartStream multipartStream = new MultipartStream(is,
+                    boundary.getBytes(StandardCharsets.UTF_8),
+                    4096, // 缓冲区大小
+                    null   // 进度监听器
 
+            );
 
-            byte[] fileContent = parts.get("content");
+            boolean nextPart = multipartStream.skipPreamble();
+            while (nextPart) {
+                // 解析part头部
+                String headers = multipartStream.readHeaders();
 
-            try (OutputStream os = new FileOutputStream(UPLOAD_DIR + "/" + fileName)) {
-                os.write(fileContent);
+                // 匹配文件名
+                Pattern fileNamePattern = Pattern.compile(
+                        "filename=\"(.*?)\"",
+                        Pattern.CASE_INSENSITIVE
+                );
+                Matcher matcher = fileNamePattern.matcher(headers);
+
+                if (matcher.find())  {
+                    String fileName = URLDecoder.decode(
+                            matcher.group(1),
+                            StandardCharsets.UTF_8.name()
+                    );
+
+                    // 直接保存原始文件名
+                    Path filePath = uploadDir.resolve(fileName).normalize();
+
+                    // 确保保存到指定目录
+                    if (!filePath.startsWith(uploadDir))  {
+                        sendResponse(exchange, 403, "Invalid file path");
+                        return;
+                    }
+
+                    // 写入文件
+                    try (OutputStream os = Files.newOutputStream(filePath))  {
+                        multipartStream.readBodyData(os);
+                    }
+
+                    sendResponse(exchange, 200, "Upload success: " + fileName);
+                    return;
+                }
+                nextPart = multipartStream.readBoundary();
             }
-            sendResponse(exchange, 200, "上传成功");
+            sendResponse(exchange, 400, "No file found");
         } catch (Exception e) {
-            sendError(exchange, 500, "上传失败: " + e.getMessage());
+            sendResponse(exchange, 500, "Upload failed: " + e.getMessage());
         }
     }
+
+
+
+
+    // 辅助方法：文件有效性验证
+    private static void validateFileIntegrity(Path file) throws IOException {
+        if (Files.size(file)  == 0) {
+            Files.delete(file);
+            throw new IOException("Empty file");
+        }
+
+        // 示例：校验PNG文件头
+        if (file.getFileName().toString().toLowerCase().endsWith(".png"))  {
+            byte[] header = Files.readAllBytes(file);
+            if (header.length  < 8 || !(header[0] == (byte)0x89 && header[1] == (byte)0x50
+                    && header[2] == (byte)0x4E && header[3] == (byte)0x47)) {
+                Files.delete(file);
+                throw new IOException("Invalid PNG file");
+            }
+        }
+    }
+
+
 
     // 文件下载接口
     private static void handleDownload(HttpExchange exchange) throws IOException {
         try {
-            // 1. 验证请求方法
-            if (!"GET".equalsIgnoreCase(exchange.getRequestMethod()))  {
-                sendError(exchange, 405, "仅支持GET方法");
-                return;
-            }
-
-            // 2. 解析文件名参数
+            // 参数解析
             String query = exchange.getRequestURI().getQuery();
-            Map<String, String> params = parseQuery(query);
-            String fileName = params.get("file");
-
-            // 3. 安全解码与校验
-            fileName = URLDecoder.decode(fileName,  StandardCharsets.UTF_8.name())
-                    .replace("/", "_")       // 防止路径遍历
-                    .replace("\\", "_")      // 过滤非法字符
-                    .replace("\0", "");      // 空字符过滤
-
-            Path filePath = Paths.get(UPLOAD_DIR,  fileName).normalize();
-
-            // 4. 文件存在性检查
-            if (!Files.exists(filePath)  || Files.isDirectory(filePath))  {
-                sendError(exchange, 404, "文件不存在");
+            if (query == null) {
+                sendResponse(exchange, 400, "Missing query parameters");
                 return;
             }
 
-            // 5. 设置响应头
-            exchange.getResponseHeaders().add("Content-Type",
-                    Files.probeContentType(filePath)  + "; charset=utf-8");
-            exchange.getResponseHeaders().add("Content-Disposition",
-                    "attachment; filename=\"" + URLEncoder.encode(fileName,  "UTF-8") + "\"");
-            exchange.sendResponseHeaders(200,  Files.size(filePath));
+            Map<String, String> params = parseQuery(query);
+            String filename = params.get("file");
+            if (filename == null || filename.isEmpty())  {
+                sendResponse(exchange, 400, "Invalid file parameter");
+                return;
+            }
 
-            // 6. 流式传输文件
+            // 文件名安全处理
+            filename = sanitizeFilename(filename);
+            if (filename == null) {
+                sendResponse(exchange, 400, "Illegal filename");
+                return;
+            }
+
+            // 路径安全验证
+            Path uploadDir = Paths.get(UPLOAD_DIR).toRealPath();
+            Path filePath = uploadDir.resolve(filename).normalize();
+            if (!filePath.startsWith(uploadDir))  {
+                sendResponse(exchange, 403, "Access denied");
+                return;
+            }
+
+            if (!Files.exists(filePath)  || Files.isDirectory(filePath))  {
+                sendResponse(exchange, 404, "File not found");
+                return;
+            }
+
+            // 设置响应头
+            exchange.getResponseHeaders().add("Content-Type",
+                    Files.probeContentType(filePath)  + "; charset=UTF-8");
+            exchange.getResponseHeaders().add("Content-Disposition",
+                    "attachment; filename=\"" + filename + "\"; filename*=UTF-8''" + encodeRFC5987(filename));
+            exchange.getResponseHeaders().add("Content-Length",  String.valueOf(Files.size(filePath)));
+
+            // 分块传输（支持大文件）
+            exchange.sendResponseHeaders(200,  Files.size(filePath));
             try (OutputStream os = exchange.getResponseBody();
                  InputStream is = Files.newInputStream(filePath))  {
-                byte[] buffer = new byte[4096];
+                byte[] buffer = new byte[8192]; // 增大缓冲区提升性能
                 int bytesRead;
                 while ((bytesRead = is.read(buffer))  != -1) {
                     os.write(buffer,  0, bytesRead);
                 }
             }
+        } catch (InvalidPathException e) {
+            sendResponse(exchange, 400, "Invalid path characters");
         } catch (Exception e) {
-            sendError(exchange, 500, "下载失败: " + e.getMessage());
+            sendResponse(exchange, 500, "Server error: " + e.getMessage());
         }
     }
-
+    private static String encodeRFC5987(String filename) throws UnsupportedEncodingException {
+        return URLEncoder.encode(filename, String.valueOf(StandardCharsets.UTF_8))
+                .replace("+", "%20")
+                .replace("*", "%2A")
+                .replace("%7E", "~"); // RFC 3986保留字符特殊处理
+    }
+    private static String sanitizeFilename(String rawName) {
+        // 步骤1：路径标准化与截断
+        String name = Paths.get(rawName).getFileName().toString();
+        // 步骤2：替换非法字符
+        name = name.replaceAll("[\\\\/:*?\"<> |]", "_");
+        // 步骤3：过滤保留名称（Windows）
+        if (name.matches("(?i)^(CON |PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\\..*)?$")) {
+            return null;
+        }
+        return name.isEmpty()  ? null : name;
+    }
     // 辅助方法：解析URL查询参数
     private static Map<String, String> parseQuery(String query) {
         return Arrays.stream(query.split("&"))
