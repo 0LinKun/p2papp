@@ -29,6 +29,8 @@ public class Server {
     public JTextArea displayArea;
     Instant now;
     FileListManager fileListManager = new FileListManager();
+    private static final String LOG_DIR = "logs";
+    private static final String LOG_FILE = "logs/server.log";
 
     public String nowtime(Instant now) {
         now = Instant.now();
@@ -41,9 +43,20 @@ public class Server {
 
     public Server(JTextArea displayArea) {
         this.displayArea = displayArea;
+        File logDir = new File(LOG_DIR);
+        if (!logDir.exists())  {
+            boolean created = logDir.mkdirs();
+            if (!created) {
+                displayArea.append(nowtime(now)  + "  日志目录创建失败\n");
+            }
+        }
         try {
             ss = new ServerSocket(SERVER_PORT);
-            displayArea.append(nowtime(now) + "  " + "服务器ip：" + ss.getLocalSocketAddress().toString() + "   服务开启端口： " + SERVER_PORT + "\n");
+            //启动日志
+            String logMessage = nowtime(now) + "  服务器ip：" + ss.getLocalSocketAddress()  + "  服务开启端口：" + SERVER_PORT + "\n";
+            displayArea.append(logMessage);
+            logToFile(logMessage);
+            //输出服务器ip地址
             IpAddressFetcher.IpAddress(displayArea);
             new Thread(() -> acceptConnections()).start();
         } catch (Exception e) {
@@ -65,7 +78,16 @@ public class Server {
             }
         }
     }
-
+    private synchronized void logToFile(String message) {
+        try (FileWriter fw = new FileWriter(LOG_FILE, true);
+             BufferedWriter bw = new BufferedWriter(fw);
+             PrintWriter out = new PrintWriter(bw)) {
+            out.println(message);
+        } catch (IOException e) {
+            e.printStackTrace();
+            displayArea.append(nowtime(now)  + "  日志写入失败: " + e.getMessage()  + "\n");
+        }
+    }
     public void broadcastToClients(String message) {
         for (CreateServerThread thread : userThreads) {
             thread.sendMessage(message);
@@ -105,7 +127,9 @@ public class Server {
 
                 while (true) {
                     line = in.readLine();
-                    displayArea.append(nowtime(now) + "  " + client.getInetAddress() + "#" + client.getPort() + ":   " + "\n" + line + "\n");
+                    String logMessage = nowtime(now) + "  " + client.getInetAddress()  + "#" + client.getPort()  + ":   " + line;
+                    displayArea.append(logMessage  + "\n");
+                    logToFile(logMessage);
                     if (line == null || line.equalsIgnoreCase("exit")) {
                         break;
                     } else if (line.equals("ls")) {
@@ -147,6 +171,8 @@ public class Server {
                     userThreads.get(i).sendMessage(msg);
                 }
             }
+            String logMessage = nowtime(now) + "  [广播消息] " + msg;
+            logToFile(logMessage);
         }
 
         public boolean addToList(String[] infor) {
@@ -159,14 +185,18 @@ public class Server {
             } else {
                 User_List.add(indentifer);
                 this.nikename = infor[0];
-                displayArea.append(nowtime(now) + "  " + infor[0] + "  " + infor[1] + "  " + infor[2] + "连接成功\n");
+                String logMessage = nowtime(now) + "  " + infor[0] + "  " + infor[1] + "  " + infor[2] + "连接成功\n";
+                displayArea.append(logMessage);
+                logToFile(logMessage);
                 return true;
             }
         }
 
         public void removeFromList() {
             if (indentifer != null) {
-                displayArea.append(nowtime(now) + "  " + indentifer.get(NICKNAME) + "  " + indentifer.get(IP) + "  " + indentifer.get(PORT) + "  已掉线\n");
+                String logMessage = nowtime(now) + "  " + indentifer.get(NICKNAME)  + "  " + indentifer.get(IP)  + "  " + indentifer.get(PORT)  + "  已掉线\n";
+                displayArea.append(logMessage);
+                logToFile(logMessage);
                 User_List.remove(indentifer);
             }
         }

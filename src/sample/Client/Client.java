@@ -40,44 +40,7 @@ public class Client implements Runnable {
         new Thread(this).start();
     }
 
-    public void checkMessage(String message) {
 
-        InetAddress addr = null;
-        try {
-            addr = InetAddress.getLocalHost();
-        } catch (UnknownHostException e) {
-            e.printStackTrace();
-        }
-        String ip = addr.getHostAddress();
-        while (true) {
-            String[] infor = message.split("#");
-            if (infor.length == 2 && Integer.parseInt(infor[1]) > 0 && Integer.parseInt(infor[1]) < 65535) {
-                displayArea.append(infor[0] + "#" + ip + "#" + infor[1] + "\n");
-                nickName = infor[0];
-                sendMessage(infor[0] + "#" + ip + "#" + infor[1]);
-                this.connect_success = true;
-                break;
-            } else {
-                displayArea.append("语法错误, 请输入格式为你的用户名#端口号");
-            }
-        }
-    }
-
-    // 在Client类中添加：
-    public synchronized void sendBinaryData(byte[] buffer, int bytesRead, Socket filesock)
-            throws IOException {
-
-        OutputStream os = filesock.getOutputStream();
-
-        // 先发送数据长度（4字节头）
-        ByteBuffer header = ByteBuffer.allocate(4);
-        header.putInt(bytesRead);
-        os.write(header.array());
-
-        // 发送实际数据
-        os.write(buffer, 0, bytesRead);
-        os.flush();
-    }
 
     @Override
     public void run() {
@@ -91,7 +54,7 @@ public class Client implements Runnable {
             Thread.sleep(100);//等待输出连接成功字样
 
             if (msg != null && msg.equals(Server.Welcome_Word)) {
-                displayArea.append(msg + "\n");
+                ClientLogger.log(displayArea,  msg + "\n");
                 while (true) {
                     if (this.connect_success == true) break;
                 }
@@ -115,12 +78,12 @@ public class Client implements Runnable {
                         }
 
                         SwingUtilities.invokeLater(() -> {
-                            displayArea.append(response + "\n");
+                            ClientLogger.log(displayArea,  response + "\n");
                         });
                     } catch (IOException e) {
                         e.printStackTrace();
                         SwingUtilities.invokeLater(() -> {
-                            displayArea.append("接受到错误信息: " + e.getMessage() + "\n");
+                            ClientLogger.log(displayArea,  "接受到错误信息: " + e.getMessage() + "\n");
                         });
                         break;
                     }
@@ -130,7 +93,7 @@ public class Client implements Runnable {
 
         } catch (Exception e) {
             e.printStackTrace();
-            displayArea.append("链接服务错误: " + e.getMessage() + "\n");
+            ClientLogger.log(displayArea,  "链接服务错误: " + e.getMessage() + "\n");
         }
     }
 
@@ -161,10 +124,11 @@ public class Client implements Runnable {
                 ArrayList<HashMap<String, String>> userList = gson.fromJson(jsonData,  type);
 
                 // 更新在线用户显示
+                // 更新在线用户显示
                 SwingUtilities.invokeLater(()  -> {
                     onlineArea.setText("");
                     for (HashMap<String, String> user : userList) {
-                        String line = String.format("%s:%s\n",  user.get("IP"), user.get("PORT"));
+                        String line = String.format("%s:%s:%s\n",user.get("NAME"),user.get("IP"), user.get("PORT"));
                         onlineArea.append(line);
                     }
                 });
@@ -181,6 +145,44 @@ public class Client implements Runnable {
         out.println(message);
     }
 
+    public void checkMessage(String message) {
+
+        InetAddress addr = null;
+        try {
+            addr = InetAddress.getLocalHost();
+        } catch (UnknownHostException e) {
+            e.printStackTrace();
+        }
+        String ip = addr.getHostAddress();
+        while (true) {
+            String[] infor = message.split("#");
+            if (infor.length == 2 && Integer.parseInt(infor[1]) > 0 && Integer.parseInt(infor[1]) < 65535) {
+                ClientLogger.log(displayArea,  infor[0] + "#" + ip + "#" + infor[1] + "\n");
+                nickName = infor[0];
+                sendMessage(infor[0] + "#" + ip + "#" + infor[1]);
+                this.connect_success = true;
+                break;
+            } else {
+                ClientLogger.log(displayArea,  "语法错误, 请输入格式为你的用户名#端口号");
+            }
+        }
+    }
+
+    // 在Client类中添加：
+    public synchronized void sendBinaryData(byte[] buffer, int bytesRead, Socket filesock)
+            throws IOException {
+
+        OutputStream os = filesock.getOutputStream();
+
+        // 先发送数据长度（4字节头）
+        ByteBuffer header = ByteBuffer.allocate(4);
+        header.putInt(bytesRead);
+        os.write(header.array());
+
+        // 发送实际数据
+        os.write(buffer, 0, bytesRead);
+        os.flush();
+    }
 
     public void exit() {
         out.println("exit");
