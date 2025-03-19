@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文件管理中心</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap"  rel="stylesheet">
+    <style>
+        :root {
+            --primary: #4A90E2;
+            --background: #f5f7fb;
+        }
+
+        * {
+            box-sizing: border-box;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            margin: 0;
+            padding: 2rem;
+            background: var(--background);
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        /* 上传区域 */
+        .upload-box {
+            border: 2px dashed var(--primary);
+            border-radius: 12px;
+            padding: 2rem;
+            text-align: center;
+            margin-bottom: 2rem;
+            transition: 0.3s;
+        }
+
+        .upload-box.dragover  {
+            background: rgba(74, 144, 226, 0.1);
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        .upload-btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 0.8rem 1.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .upload-btn:hover {
+            transform: scale(1.05);
+        }
+
+        /* 文件列表 */
+        .file-list {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            padding: 1rem;
+            border-bottom: 1px solid #eee;
+        }
+
+        .file-item:last-child {
+            border-bottom: none;
+        }
+
+        .file-name {
+            flex: 1;
+            color: #333;
+            margin-right: 1rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .download-btn {
+            background: none;
+            border: 1px solid var(--primary);
+            color: var(--primary);
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+        }.search-box {
+             display: flex;
+             gap: 10px;
+             margin-bottom: 1.5rem;
+         }
+        #searchInput {
+            flex: 1;
+            padding: 0.8rem;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        .search-box button {
+            background: #ff4444;
+            color: white;
+            border: none;
+            width: 40px;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <!-- 上传区域 -->
+    <div class="upload-box" id="dropZone">
+        <input type="file" id="fileInput" multiple>
+        <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
+            选择文件 或 拖拽至此
+        </button>
+        <div id="progressBar" style="display:none; margin-top:1rem;">
+            <div style="height:4px; background:#e0e0e0; border-radius:2px;">
+                <div id="progress" style="width:0%; height:100%; background:var(--primary); transition:0.3s;"></div>
+            </div>
+        </div>
+    </div>
+    <div class="search-box">
+        <input type="text" id="searchInput" placeholder="输入文件名关键词（支持模糊匹配）"
+               oninput="filterFiles(this.value)">
+        <button onclick="clearSearch()">×</button>
+    </div>
+    <!-- 文件列表 -->
+    <div class="file-list" id="fileList"></div>
+</div>
+
+<script>
+    // 初始化加载文件列表
+    let refreshInterval = setInterval(loadFileList, 5000);
+
+    // 文件列表加载函数
+    async function loadFileList() {
+        try {
+            const res = await fetch('/list');
+            const files = await res.json();
+            renderFileList(files);
+        } catch (e) {
+            console.error(' 加载失败:', e);
+        }
+    }
+    let allFiles = []; // 全局缓存文件列表
+
+    // 修改原loadFileList函数
+    async function loadFileList() {
+        const res = await fetch('/list');
+        allFiles = await res.json();
+        filterFiles(document.getElementById('searchInput').value);
+    }
+
+    // 模糊搜索核心逻辑（支持*通配符）
+    function filterFiles(keyword) {
+        const normalizedKeyword = keyword.trim().toLowerCase().replace(/\*/g,  '.*');
+        const regex = new RegExp(normalizedKeyword, 'i');
+        const filtered = allFiles.filter(file  => regex.test(file.toLowerCase()));
+        renderFileList(filtered);
+    }
+
+    function clearSearch() {
+        document.getElementById('searchInput').value  = '';
+        filterFiles('');
+    }
+    // 渲染文件列表
+    function renderFileList(files) {
+        const container = document.getElementById('fileList');
+        container.innerHTML  = files.map(file  => `
+                <div class="file-item">
+                    <span class="file-name">${file}</span>
+                    <button class="download-btn" onclick="downloadFile('${file}')">
+                        下载
+                    </button>
+                </div>
+            `).join('');
+    }
+
+    // 文件上传处理
+    document.getElementById('fileInput').addEventListener('change',  async (e) => {
+        const files = e.target.files;
+        if (files.length  === 0) return;
+
+        const progress = document.getElementById('progress');
+        document.getElementById('progressBar').style.display  = 'block';
+
+        for (const file of files) {
+            const formData = new FormData();
+            formData.append('file',  file);
+
+            try {
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST',  '/upload');
+
+                xhr.upload.onprogress  = (e) => {
+                    const percent = Math.round((e.loaded  / e.total)  * 100);
+                    progress.style.width  = percent + '%';
+                };
+
+                xhr.onload  = () => {
+                    if (xhr.status  === 200) {
+                        loadFileList();
+                    }
+                };
+
+                xhr.send(formData);
+            } catch (error) {
+                alert(`上传失败: ${error.message}`);
+            }
+        }
+    });
+
+    // 文件下载函数
+    function downloadFile(filename) {
+        window.location.href  = `/download?file=${encodeURIComponent(filename)}`;
+    }
+
+    // 拖拽上传支持
+    const dropZone = document.getElementById('dropZone');
+    dropZone.addEventListener('dragover',  (e) => {
+        e.preventDefault();
+        dropZone.classList.add('dragover');
+    });
+
+    dropZone.addEventListener('dragleave',  () => {
+        dropZone.classList.remove('dragover');
+    });
+
+    dropZone.addEventListener('drop',  (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+        document.getElementById('fileInput').files  = e.dataTransfer.files;
+    });
+</script>
+</body>
+</html>

@@ -1,8 +1,8 @@
 package sample.Server;
 
-import sample.AllNeed.FileInfo;
-import sample.AllNeed.FileListManager;
 
+import sample.AllNeed.FileListManager;
+import com.google.gson.Gson;
 import javax.swing.*;
 import java.io.*;
 import java.net.ServerSocket;
@@ -12,7 +12,6 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 
 public class Server {
@@ -31,13 +30,13 @@ public class Server {
     Instant now;
     FileListManager fileListManager = new FileListManager();
 
-    public String nowtime(Instant now){
+    public String nowtime(Instant now) {
         now = Instant.now();
         // 将 Instant 转换为 ZonedDateTime 并设置为中国时区 (Asia/Shanghai)
         ZonedDateTime zonedNowInChina = now.atZone(ZoneId.of("Asia/Shanghai"));
         // 创建一个带有中文日期格式的格式化器
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy年MM月dd日 HH时mm分ss秒").withZone(ZoneId.of("Asia/Shanghai"));
-        return  zonedNowInChina.format(formatter);
+        return zonedNowInChina.format(formatter);
     }
 
     public Server(JTextArea displayArea) {
@@ -45,6 +44,7 @@ public class Server {
         try {
             ss = new ServerSocket(SERVER_PORT);
             displayArea.append(nowtime(now) + "  " + "服务器ip：" + ss.getLocalSocketAddress().toString() + "   服务开启端口： " + SERVER_PORT + "\n");
+            IpAddressFetcher.IpAddress(displayArea);
             new Thread(() -> acceptConnections()).start();
         } catch (Exception e) {
             e.printStackTrace();
@@ -97,8 +97,7 @@ public class Server {
                 if (line != null && addToList(line.split("#"))) {
                     broadcast(nowtime(now) + "  " + line + " 加入局域网.");
                     out.println("您登录成功.");
-                }
-                else {
+                } else {
                     out.println(nowtime(now) + "  " + "您的请求被拒绝.");
                     client.close();
                     return;
@@ -106,32 +105,34 @@ public class Server {
 
                 while (true) {
                     line = in.readLine();
-                    displayArea.append(nowtime(now) + "  " + client.getInetAddress() + "#" + client.getPort() + ":   " + "\n"+ line + "\n");
+                    displayArea.append(nowtime(now) + "  " + client.getInetAddress() + "#" + client.getPort() + ":   " + "\n" + line + "\n");
                     if (line == null || line.equalsIgnoreCase("exit")) {
                         break;
                     } else if (line.equals("ls")) {
                         out.println(listAllUsers());
                         displayArea.append(listAllUsers());
+                    } else if (line.equals("updateOnlineUsers")) {
+                        sendOnlineUsers(out);
                     } else if (line.equals("filelist") || line.equals("fl")) {
                         fileListManager.updateAndSendFileList(out);
                     } else if (line.equals("help")) {
                         out.println("|简短指令|解释说明|\n" +
                                 "|ls  |list online 列出在线成员|\n " +
-                                "|cls |clean 清空屏幕|"+
+                                "|cls |clean 清空屏幕|" +
                                 "|exit  |exit 退出连接|\n " +
                                 "|fl    |fileList  列出服务器存在文件|\n " +
                                 "|share  |to share file all users组播分享文件|\n " +
-                                "|upload  |upload file to server上传文件到服务器|\n");
-                    }else if (line.equals("share")){
+                                "|upload  |upload file to server上传文件到服务器|\n" +
+                                "|web服务 输入服务器ip：8082端口即可访问web端上传下载文件|\n");
+                    } else if (line.equals("share")) {
                         broadcastToClients("share");
-                    }
-                    else {
-                        broadcast(nowtime(now) + "  " + this.nikename + "#" + client.getPort() + ":   " + "\n"+ line + "\n");
+                    } else {
+                        broadcast(nowtime(now) + "  " + this.nikename + "#" + client.getPort() + ":   " + "\n" + line + "\n");
                     }
                     sleep(10);
                 }
                 removeFromList();
-                broadcast(nowtime(now) + "  " + client.getInetAddress() + "#" + this.nikename+"#" + client.getPort() + ":   " + "\n"+ line + " 离开.");
+                broadcast(nowtime(now) + "  " + client.getInetAddress() + "#" + this.nikename + "#" + client.getPort() + ":   " + "\n" + line + " 离开.");
                 client.close();
             } catch (Exception e) {
                 e.printStackTrace();
@@ -157,7 +158,7 @@ public class Server {
                 return false;
             } else {
                 User_List.add(indentifer);
-                this.nikename=infor[0];
+                this.nikename = infor[0];
                 displayArea.append(nowtime(now) + "  " + infor[0] + "  " + infor[1] + "  " + infor[2] + "连接成功\n");
                 return true;
             }
@@ -187,6 +188,18 @@ public class Server {
             out.println(msg);
         }
     }
+
+    private void sendOnlineUsers(PrintWriter out) {
+        // 转换为JSON字符串
+        Gson gson = new Gson();
+        String jsonData = gson.toJson(User_List);
+
+        // 发送协议格式：消息类型 + 数据长度 + 数据内容
+        out.println("USER_LIST");     // 消息类型标识
+        out.println(jsonData.length());  // 数据长度
+        out.println(jsonData);        // 实际数据
+    }
+
     public static void startFileServer() {
         new Thread(() -> {
             try (ServerSocket fileServer = new ServerSocket(FILE_PORT)) {
@@ -204,7 +217,7 @@ public class Server {
         private final Socket dataSocket;
 
         public FileTransferHandler(Socket socket) {
-            this.dataSocket  = socket;
+            this.dataSocket = socket;
         }
 
         @Override

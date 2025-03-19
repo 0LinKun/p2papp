@@ -1,7 +1,10 @@
 package sample.Server;
 
+import web.FileServer;
+
 import javax.swing.*;
 import java.awt.*;
+import java.io.IOException;
 
 public class ServerMain extends JFrame {
     private final ServerFrame serverFrame;
@@ -20,8 +23,18 @@ public class ServerMain extends JFrame {
     }
 
     public static void main(String[] args) {
+        //启动web服务
+                FileServer fileserver= new FileServer();
+        try {
+            fileserver.Filemain();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+
         SwingUtilities.invokeLater(() -> {
             new ServerMain().setVisible(true);
         });
+
     }
 }
