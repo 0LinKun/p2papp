@@ -37,6 +37,7 @@ public class ServerFrame extends JPanel {
         sendButton.addActionListener(e -> Broadcast());
         inputField.addActionListener(e -> Broadcast());
     }
+
     private void Broadcast() {
         String textToSend = inputField.getText();
         if (!textToSend.isEmpty()) {

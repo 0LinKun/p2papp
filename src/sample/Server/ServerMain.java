@@ -25,9 +25,9 @@ public class ServerMain extends JFrame {
 
     public static void main(String[] args) {
         //启动web服务
-                FileServer fileserver= new FileServer();
+        FileServer fileserver = new FileServer();
         try {
-            fileserver.Filemain();
+            FileServer.Filemain();
         } catch (IOException e) {
             e.printStackTrace();
         }

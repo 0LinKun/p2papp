@@ -1,8 +1,9 @@
 package sample.Server;
 
 
-import sample.AllNeed.FileListManager;
 import com.google.gson.Gson;
+import sample.AllNeed.FileListManager;
+
 import javax.swing.*;
 import java.io.*;
 import java.net.ServerSocket;
@@ -18,42 +19,33 @@ public class Server {
     public static final int SERVER_PORT = 10001;
     // 文件传输专用端口
     public static final int FILE_PORT = 8081;
+    public static final String Welcome_Word = "欢迎加入, 请输入你的用户名#端口号";
+    private static final String LOG_DIR = "logs";
+    private static final String LOG_FILE = "logs/server.log";
     public static String IP = "IP";
     public static String PORT = "PORT";
     public static String NICKNAME = "NAME";
-    public static final String Welcome_Word = "欢迎加入, 请输入你的用户名#端口号";
+    private final ArrayList<HashMap<String, String>> User_List = new ArrayList<>();
     public ServerSocket ss;
     public ArrayList<CreateServerThread> userThreads = new ArrayList<>();
-    private final ArrayList<HashMap<String, String>> User_List = new ArrayList<>();
-    private HashMap<String, String> indentifer;
     public JTextArea displayArea;
     Instant now;
     FileListManager fileListManager = new FileListManager();
-    private static final String LOG_DIR = "logs";
-    private static final String LOG_FILE = "logs/server.log";
-
-    public String nowtime(Instant now) {
-        now = Instant.now();
-        // 将 Instant 转换为 ZonedDateTime 并设置为中国时区 (Asia/Shanghai)
-        ZonedDateTime zonedNowInChina = now.atZone(ZoneId.of("Asia/Shanghai"));
-        // 创建一个带有中文日期格式的格式化器
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy年MM月dd日 HH时mm分ss秒").withZone(ZoneId.of("Asia/Shanghai"));
-        return zonedNowInChina.format(formatter);
-    }
+    private HashMap<String, String> indentifer;
 
     public Server(JTextArea displayArea) {
         this.displayArea = displayArea;
         File logDir = new File(LOG_DIR);
-        if (!logDir.exists())  {
+        if (!logDir.exists()) {
             boolean created = logDir.mkdirs();
             if (!created) {
-                displayArea.append(nowtime(now)  + "  日志目录创建失败\n");
+                displayArea.append(nowtime(now) + "  日志目录创建失败\n");
             }
         }
         try {
             ss = new ServerSocket(SERVER_PORT);
             //启动日志
-            String logMessage = nowtime(now) + "  服务器ip：" + ss.getLocalSocketAddress()  + "  服务开启端口：" + SERVER_PORT + "\n";
+            String logMessage = nowtime(now) + "  服务器ip：" + ss.getLocalSocketAddress() + "  服务开启端口：" + SERVER_PORT + "\n";
             displayArea.append(logMessage);
             logToFile(logMessage);
             //输出服务器ip地址
@@ -64,6 +56,28 @@ public class Server {
             displayArea.append(nowtime(now) + "  " + "服务开启错误: " + e.getMessage() + "\n");
         }
         startFileServer();
+    }
+
+    public static void startFileServer() {
+        new Thread(() -> {
+            try (ServerSocket fileServer = new ServerSocket(FILE_PORT)) {
+                while (true) {
+                    Socket dataSocket = fileServer.accept();
+                    new FileTransferHandler(dataSocket).start();
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }).start();
+    }
+
+    public String nowtime(Instant now) {
+        now = Instant.now();
+        // 将 Instant 转换为 ZonedDateTime 并设置为中国时区 (Asia/Shanghai)
+        ZonedDateTime zonedNowInChina = now.atZone(ZoneId.of("Asia/Shanghai"));
+        // 创建一个带有中文日期格式的格式化器
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy年MM月dd日 HH时mm分ss秒").withZone(ZoneId.of("Asia/Shanghai"));
+        return zonedNowInChina.format(formatter);
     }
 
     private void acceptConnections() {
@@ -78,6 +92,7 @@ public class Server {
             }
         }
     }
+
     private synchronized void logToFile(String message) {
         try (FileWriter fw = new FileWriter(LOG_FILE, true);
              BufferedWriter bw = new BufferedWriter(fw);
@@ -85,137 +100,13 @@ public class Server {
             out.println(message);
         } catch (IOException e) {
             e.printStackTrace();
-            displayArea.append(nowtime(now)  + "  日志写入失败: " + e.getMessage()  + "\n");
+            displayArea.append(nowtime(now) + "  日志写入失败: " + e.getMessage() + "\n");
         }
     }
+
     public void broadcastToClients(String message) {
         for (CreateServerThread thread : userThreads) {
             thread.sendMessage(message);
-        }
-    }
-
-    // Inner class CreateServerThread
-    public class CreateServerThread extends Thread {
-        private final Socket client;
-        private BufferedReader in;
-        private String nikename;
-        private PrintWriter out;
-        private final Server parent;
-
-        public CreateServerThread(Socket s, Server parent) {
-            this.client = s;
-            this.parent = parent;
-            start();
-        }
-
-        @Override
-        public void run() {
-            try {
-                in = new BufferedReader(new InputStreamReader(client.getInputStream()));
-                out = new PrintWriter(client.getOutputStream(), true);
-                out.println(Welcome_Word);
-                String line;
-                line = in.readLine();
-                if (line != null && addToList(line.split("#"))) {
-                    broadcast(nowtime(now) + "  " + line + " 加入局域网.");
-                    out.println("您登录成功.");
-                } else {
-                    out.println(nowtime(now) + "  " + "您的请求被拒绝.");
-                    client.close();
-                    return;
-                }
-
-                while (true) {
-                    line = in.readLine();
-                    String logMessage = nowtime(now) + "  " + client.getInetAddress()  + "#" + client.getPort()  + ":   " + line;
-                    displayArea.append(logMessage  + "\n");
-                    logToFile(logMessage);
-                    if (line == null || line.equalsIgnoreCase("exit")) {
-                        break;
-                    } else if (line.equals("ls")) {
-                        out.println(listAllUsers());
-                        displayArea.append(listAllUsers());
-                    } else if (line.equals("updateOnlineUsers")) {
-                        sendOnlineUsers(out);
-                    } else if (line.equals("filelist") || line.equals("fl")) {
-                        fileListManager.updateAndSendFileList(out);
-                    } else if (line.equals("help")) {
-                        out.println("|简短指令|解释说明|\n" +
-                                "|ls  |list online 列出在线成员|\n " +
-                                "|cls |clean 清空屏幕|" +
-                                "|exit  |exit 退出连接|\n " +
-                                "|fl    |fileList  列出服务器存在文件|\n " +
-                                "|share  |to share file all users组播分享文件|\n " +
-                                "|upload  |upload file to server上传文件到服务器|\n" +
-                                "|web服务 输入服务器ip：8082端口即可访问web端上传下载文件|\n");
-                    } else if (line.equals("share")) {
-                        broadcastToClients("share");
-                    } else {
-                        broadcast(nowtime(now) + "  " + this.nikename + "#" + client.getPort() + ":   " + "\n" + line + "\n");
-                    }
-                    sleep(10);
-                }
-                removeFromList();
-                broadcast(nowtime(now) + "  " + client.getInetAddress() + "#" + this.nikename + "#" + client.getPort() + ":   " + "\n" + line + " 离开.");
-                client.close();
-            } catch (Exception e) {
-                e.printStackTrace();
-                displayArea.append(nowtime(now) + "  " + "连接线程错误: " + e.getMessage() + "\n");
-                removeFromList();
-            }
-        }
-
-        public void broadcast(String msg) {
-            for (int i = 0; i < userThreads.size(); i++) {
-                if (userThreads.get(i) != this) {
-                    userThreads.get(i).sendMessage(msg);
-                }
-            }
-            String logMessage = nowtime(now) + "  [广播消息] " + msg;
-            logToFile(logMessage);
-        }
-
-        public boolean addToList(String[] infor) {
-            indentifer = new HashMap<>();
-            indentifer.put(NICKNAME, infor[0]);
-            indentifer.put(IP, infor[1]);
-            indentifer.put(PORT, infor[2]);
-            if (User_List.contains(indentifer)) {
-                return false;
-            } else {
-                User_List.add(indentifer);
-                this.nikename = infor[0];
-                String logMessage = nowtime(now) + "  " + infor[0] + "  " + infor[1] + "  " + infor[2] + "连接成功\n";
-                displayArea.append(logMessage);
-                logToFile(logMessage);
-                return true;
-            }
-        }
-
-        public void removeFromList() {
-            if (indentifer != null) {
-                String logMessage = nowtime(now) + "  " + indentifer.get(NICKNAME)  + "  " + indentifer.get(IP)  + "  " + indentifer.get(PORT)  + "  已掉线\n";
-                displayArea.append(logMessage);
-                logToFile(logMessage);
-                User_List.remove(indentifer);
-            }
-        }
-
-        public String listAllUsers() {
-            String s = "-- 在线列表 --\n";
-            HashMap<String, String> infor_map;
-            for (int i = 0; i < User_List.size(); i++) {
-                infor_map = User_List.get(i);
-                s += infor_map.get(NICKNAME) + "  ";
-                s += infor_map.get(IP) + "  ";
-                s += infor_map.get(PORT) + "\n";
-            }
-            s += "-----------------\n";
-            return s;
-        }
-
-        private void sendMessage(String msg) {
-            out.println(msg);
         }
     }
 
@@ -228,19 +119,6 @@ public class Server {
         out.println("USER_LIST");     // 消息类型标识
         out.println(jsonData.length());  // 数据长度
         out.println(jsonData);        // 实际数据
-    }
-
-    public static void startFileServer() {
-        new Thread(() -> {
-            try (ServerSocket fileServer = new ServerSocket(FILE_PORT)) {
-                while (true) {
-                    Socket dataSocket = fileServer.accept();
-                    new FileTransferHandler(dataSocket).start();
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }).start();
     }
 
     static class FileTransferHandler extends Thread {
@@ -294,5 +172,132 @@ public class Server {
             }
         }
 
+    }
+
+    // Inner class CreateServerThread
+    public class CreateServerThread extends Thread {
+        private final Socket client;
+        private final Server parent;
+        private BufferedReader in;
+        private String nikename;
+        private PrintWriter out;
+
+        public CreateServerThread(Socket s, Server parent) {
+            this.client = s;
+            this.parent = parent;
+            start();
+        }
+
+        @Override
+        public void run() {
+            try {
+                in = new BufferedReader(new InputStreamReader(client.getInputStream()));
+                out = new PrintWriter(client.getOutputStream(), true);
+                out.println(Welcome_Word);
+                String line;
+                line = in.readLine();
+                if (line != null && addToList(line.split("#"))) {
+                    broadcast(nowtime(now) + "  " + line + " 加入局域网.");
+                    out.println("您登录成功.");
+                } else {
+                    out.println(nowtime(now) + "  " + "您的请求被拒绝.");
+                    client.close();
+                    return;
+                }
+
+                while (true) {
+                    line = in.readLine();
+                    String logMessage = nowtime(now) + "  " + client.getInetAddress() + "#" + client.getPort() + ":   " + line;
+                    displayArea.append(logMessage + "\n");
+                    logToFile(logMessage);
+                    if (line == null || line.equalsIgnoreCase("exit")) {
+                        break;
+                    } else if (line.equals("ls")) {
+                        out.println(listAllUsers());
+                        displayArea.append(listAllUsers());
+                    } else if (line.equals("updateOnlineUsers")) {
+                        sendOnlineUsers(out);
+                    } else if (line.equals("filelist") || line.equals("fl")) {
+                        fileListManager.updateAndSendFileList(out);
+                    } else if (line.equals("help")) {
+                        out.println("|简短指令|解释说明|\n" +
+                                "|ls  |list online 列出在线成员|\n " +
+                                "|cls |clean 清空屏幕|" +
+                                "|exit  |exit 退出连接|\n " +
+                                "|fl    |fileList  列出服务器存在文件|\n " +
+                                "|share  |to share file all users组播分享文件|\n " +
+                                "|upload  |upload file to server上传文件到服务器|\n" +
+                                "|web服务 输入服务器ip：8082端口即可访问web端上传下载文件|\n");
+                    } else if (line.equals("share")) {
+                        broadcastToClients("share");
+                    } else {
+                        broadcast(this.nikename + "#" + client.getPort() + ":   " + line);
+                    }
+                    sleep(10);
+                }
+                removeFromList();
+                broadcast(client.getInetAddress() + "#" + this.nikename + "#" + client.getPort() + ":   " + "\n" + line + " 离开.");
+                client.close();
+            } catch (Exception e) {
+                e.printStackTrace();
+                String ms = nowtime(now) + "  " + "连接线程错误: " + e.getMessage() + "\n";
+                displayArea.append(ms);
+                logToFile(ms);
+                removeFromList();
+            }
+        }
+
+        public void broadcast(String msg) {
+            for (int i = 0; i < userThreads.size(); i++) {
+                if (userThreads.get(i) != this) {
+                    userThreads.get(i).sendMessage(msg);
+                }
+            }
+            String logMessage = nowtime(now) + "  [广播消息] " + msg;
+            logToFile(logMessage);
+        }
+
+        public boolean addToList(String[] infor) {
+            indentifer = new HashMap<>();
+            indentifer.put(NICKNAME, infor[0]);
+            indentifer.put(IP, infor[1]);
+            indentifer.put(PORT, infor[2]);
+            if (User_List.contains(indentifer)) {
+                return false;
+            } else {
+                User_List.add(indentifer);
+                this.nikename = infor[0];
+                String logMessage = nowtime(now) + "  " + infor[0] + "  " + infor[1] + "  " + infor[2] + "连接成功\n";
+                displayArea.append(logMessage);
+                logToFile(logMessage);
+                return true;
+            }
+        }
+
+        public void removeFromList() {
+            if (indentifer != null) {
+                String logMessage = nowtime(now) + "  " + indentifer.get(NICKNAME) + "  " + indentifer.get(IP) + "  " + indentifer.get(PORT) + "  已掉线\n";
+                displayArea.append(logMessage);
+                logToFile(logMessage);
+                User_List.remove(indentifer);
+            }
+        }
+
+        public String listAllUsers() {
+            String s = "-- 在线列表 --\n";
+            HashMap<String, String> infor_map;
+            for (int i = 0; i < User_List.size(); i++) {
+                infor_map = User_List.get(i);
+                s += infor_map.get(NICKNAME) + "  ";
+                s += infor_map.get(IP) + "  ";
+                s += infor_map.get(PORT) + "\n";
+            }
+            s += "-----------------\n";
+            return s;
+        }
+
+        private void sendMessage(String msg) {
+            out.println(msg);
+        }
     }
 }

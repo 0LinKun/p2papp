@@ -2,9 +2,9 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
     <title>文件管理中心</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap"  rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
     <style>
         :root {
             --primary: #4A90E2;
@@ -118,7 +118,7 @@
 <div class="container">
     <!-- 上传区域 -->
     <div class="upload-box" id="dropZone">
-        <input type="file" id="fileInput" multiple>
+        <input id="fileInput" multiple type="file">
         <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
             选择文件 或 拖拽至此
         </button>
@@ -129,8 +129,8 @@
         </div>
     </div>
     <div class="search-box">
-        <input type="text" id="searchInput" placeholder="输入文件名关键词（支持模糊匹配）"
-               oninput="filterFiles(this.value)">
+        <input id="searchInput" oninput="filterFiles(this.value)" placeholder="输入文件名关键词（支持模糊匹配）"
+               type="text">
         <button onclick="clearSearch()">×</button>
     </div>
     <!-- 文件列表 -->

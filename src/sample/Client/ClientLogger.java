@@ -21,7 +21,7 @@ class ClientLogger {
         try {
             // 创建日志目录
             Path logPath = Paths.get(LOG_DIR);
-            if (!Files.exists(logPath))  {
+            if (!Files.exists(logPath)) {
                 Files.createDirectories(logPath);
             }
 
@@ -30,21 +30,21 @@ class ClientLogger {
             String filename = "client_" + dateStr + ".log";
 
             // 生成带时间日志内容
-            String logContent = String.format("[%s]  %s\n",
-                    LogTimeFormatter.getFormattedTime(),
-                    message);
+            String logContent = String.format("[%s]  %s\n", LogTimeFormatter.getFormattedTime(), message);
 
             // 写入显示区域
-            SwingUtilities.invokeLater(()  -> displayArea.append(logContent));
+            SwingUtilities.invokeLater(() -> displayArea.append(logContent));
 
             // 写入文件（追加模式）
-            Files.write(Paths.get(LOG_DIR,  filename), logContent.getBytes(),
+            Files.write(Paths.get(LOG_DIR, filename), logContent.getBytes(),
                     StandardOpenOption.CREATE, StandardOpenOption.APPEND);
         } catch (IOException e) {
             System.err.println(" 日志写入失败: " + e.getMessage());
         }
     }
-}class LogTimeFormatter {
+}
+
+class LogTimeFormatter {
     private static final DateTimeFormatter formatter =
             DateTimeFormatter.ofPattern("yyyy-MM-dd  HH:mm:ss")
                     .withZone(ZoneId.of("Asia/Shanghai"));

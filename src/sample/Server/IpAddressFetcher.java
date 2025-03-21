@@ -14,12 +14,12 @@ public class IpAddressFetcher {
 
     public static void IpAddress(JTextArea displayArea) {
         List<String> ipAddresses = getIPv4Addresses();
-        if (ipAddresses.isEmpty())  {
+        if (ipAddresses.isEmpty()) {
             displayArea.append("No  IPv4 address found\n");
         } else {
             displayArea.append("Available  IPv4 addresses:\n");
             for (int i = 0; i < ipAddresses.size(); i++) {
-                displayArea.append(ipAddresses.get(i)+"\n");
+                displayArea.append(ipAddresses.get(i) + "\n");
             }
         }
     }
@@ -33,7 +33,7 @@ public class IpAddressFetcher {
 
             // 读取命令输出
             try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(process.getInputStream(),  "GBK"))) { // Windows中文系统编码
+                    new InputStreamReader(process.getInputStream(), "GBK"))) { // Windows中文系统编码
 
                 String line;
                 Pattern pattern = Pattern.compile(
@@ -42,11 +42,11 @@ public class IpAddressFetcher {
                         Pattern.CASE_INSENSITIVE
                 );
 
-                while ((line = reader.readLine())  != null) {
+                while ((line = reader.readLine()) != null) {
                     Matcher matcher = pattern.matcher(line);
-                    if (matcher.find())  {
-                        String ip = matcher.group(2)  != null ? matcher.group(2)  : matcher.group(4);
-                        if (!ip.equals("127.0.0.1"))  { // 过滤回环地址
+                    if (matcher.find()) {
+                        String ip = matcher.group(2) != null ? matcher.group(2) : matcher.group(4);
+                        if (!ip.equals("127.0.0.1")) { // 过滤回环地址
                             addresses.add(ip);
                         }
                     }

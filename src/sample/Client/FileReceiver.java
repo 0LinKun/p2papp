@@ -1,5 +1,6 @@
 package sample.Client;
 
+import javax.swing.*;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.FileOutputStream;
@@ -19,7 +20,10 @@ public class FileReceiver extends Thread {
     private static final int MAX_DATAGRAM_SIZE = 1472;
     private static final String MULTICAST_GROUP = "239.255.10.1";
     private static final int PORT = 5000;
-
+    JTextArea jTextArea;
+    FileReceiver(JTextArea jTextArea){
+        this.jTextArea=jTextArea;
+    }
     public void run() {
         try {
             Files.createDirectories(Paths.get("file"));
@@ -30,7 +34,7 @@ public class FileReceiver extends Thread {
         try (MulticastSocket socket = new MulticastSocket(PORT)) {
             InetAddress group = InetAddress.getByName(MULTICAST_GROUP);
             socket.joinGroup(group);
-            socket.setReceiveBufferSize(MAX_DATAGRAM_SIZE  * 100);
+            socket.setReceiveBufferSize(MAX_DATAGRAM_SIZE * 100);
 
             Map<Integer, byte[]> receivedChunks = new ConcurrentHashMap<>();
             AtomicInteger totalChunks = new AtomicInteger(-1);
@@ -54,7 +58,7 @@ public class FileReceiver extends Thread {
                                AtomicInteger receivedCount) {
         try {
             ByteArrayInputStream bais = new ByteArrayInputStream(
-                    packet.getData(),  packet.getOffset(),  packet.getLength());
+                    packet.getData(), packet.getOffset(), packet.getLength());
             DataInputStream dis = new DataInputStream(bais);
 
             int chunkId = dis.readInt();
@@ -65,22 +69,22 @@ public class FileReceiver extends Thread {
             String currentFileName = new String(fileNameBytes, StandardCharsets.UTF_8);
 
             // 初始化元数据
-            if (totalChunks.get()  == -1) {
+            if (totalChunks.get() == -1) {
                 totalChunks.set(total);
                 fileName.set(currentFileName);
             }
 
             // 读取分片数据
-            int dataLength = packet.getLength()  - 12 - fileNameLength;
+            int dataLength = packet.getLength() - 12 - fileNameLength;
             byte[] chunkData = new byte[dataLength];
             dis.readFully(chunkData);
 
             // 存储分片
-            if (!receivedChunks.containsKey(chunkId))  {
-                receivedChunks.put(chunkId,  chunkData);
+            if (!receivedChunks.containsKey(chunkId)) {
+                receivedChunks.put(chunkId, chunkData);
                 int count = receivedCount.incrementAndGet();
 
-                if (count == totalChunks.get())  {
+                if (count == totalChunks.get()) {
                     assembleFile(receivedChunks, fileName.get());
                     receivedChunks.clear();
                     receivedCount.set(0);
@@ -93,14 +97,14 @@ public class FileReceiver extends Thread {
     }
 
     private void assembleFile(Map<Integer, byte[]> chunks, String fileName) {
-        try (FileOutputStream fos = new FileOutputStream(Paths.get("file",  fileName).toFile())) {
-            for (int i = 0; i < chunks.size();  i++) {
+        try (FileOutputStream fos = new FileOutputStream(Paths.get("file", fileName).toFile())) {
+            for (int i = 0; i < chunks.size(); i++) {
                 byte[] chunk = chunks.get(i);
                 if (chunk != null) {
                     fos.write(chunk);
                 }
             }
-            System.out.println(" 文件接收完成：" + fileName);
+            ClientLogger.log(this.jTextArea," 文件接收完成：" + fileName);
         } catch (IOException e) {
             e.printStackTrace();
         }
