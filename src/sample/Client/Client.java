@@ -127,6 +127,7 @@ public class Client implements Runnable {
                 // 更新在线用户显示
                 SwingUtilities.invokeLater(()  -> {
                     onlineArea.setText("");
+                    onlineArea.append("当前在线人数："+userList.size()+"\n");
                     for (HashMap<String, String> user : userList) {
                         String line = String.format("%s:%s:%s\n",user.get("NAME"),user.get("IP"), user.get("PORT"));
                         onlineArea.append(line);
