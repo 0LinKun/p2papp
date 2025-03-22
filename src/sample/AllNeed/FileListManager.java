@@ -16,15 +16,9 @@ import java.util.*;
 
 public class FileListManager {
 
+    Map<String, FileInfo> remoteFileList;
     private Map<String, FileInfo> currentFileList = new HashMap<>();
 
-    public Map<String, FileInfo> getCurrentFileList() {
-        return currentFileList;
-    }
-
-    public FileInfo getFileInfo(String filename) {
-        return currentFileList.get(filename);
-    }
     // 在FileListManager类中添加：
     public static FileInfo generateFileInfo(Path path) throws IOException, NoSuchAlgorithmException {
 
@@ -83,6 +77,14 @@ public class FileListManager {
         return sb.toString();
     }
 
+    public Map<String, FileInfo> getCurrentFileList() {
+        return currentFileList;
+    }
+
+    public FileInfo getFileInfo(String filename) {
+        return currentFileList.get(filename);
+    }
+
     public void updateAndSendFileList(PrintWriter out) throws IOException, NoSuchAlgorithmException {
         updateFileList();
         sendFileList(out);
@@ -125,91 +127,93 @@ public class FileListManager {
             currentFileList = newFileList;
         }
     }
+
     private void sendFileList(PrintWriter out) {
         // 构建可扩展的JSON结构
         List<Map<String, Object>> fileList = new ArrayList<>();
 
-        for (FileInfo fileInfo : currentFileList.values())  {
+        for (FileInfo fileInfo : currentFileList.values()) {
             Map<String, Object> fileData = new LinkedHashMap<>();
-            fileData.put("filename",  fileInfo.filename);
-            fileData.put("total_chunks",  fileInfo.chunks.isEmpty()  ? 0 : fileInfo.total_chunks);
-            fileData.put("chunk_size",  FileInfo.chunk_size);  // 保持全局块大小
+            fileData.put("filename", fileInfo.filename);
+            fileData.put("total_chunks", fileInfo.chunks.isEmpty() ? 0 : fileInfo.total_chunks);
+            fileData.put("chunk_size", FileInfo.chunk_size);  // 保持全局块大小
 
             //分块数据智能封装
             List<Map<String, Object>> chunks = new ArrayList<>();
-            if (!fileInfo.chunks.isEmpty())  {
-                for (FileInfo.ChunkInfo chunk : fileInfo.chunks)  {
+            if (!fileInfo.chunks.isEmpty()) {
+                for (FileInfo.ChunkInfo chunk : fileInfo.chunks) {
                     Map<String, Object> chunkData = new HashMap<>();
-                    chunkData.put("number",  chunk.chunk_number);
-                    chunkData.put("hash",  chunk.hash);
-                    chunkData.put("offset",  chunk.chunk_number  * FileInfo.chunk_size);  // 增加计算字段
+                    chunkData.put("number", chunk.chunk_number);
+                    chunkData.put("hash", chunk.hash);
+                    chunkData.put("offset", chunk.chunk_number * FileInfo.chunk_size);  // 增加计算字段
                     chunks.add(chunkData);
                 }
             }
-            fileData.put("chunks",  chunks);
+            fileData.put("chunks", chunks);
 
             // 增加校验元数据
-            fileData.put("protocol_version",  "1.1");
-            fileData.put("timestamp",  System.currentTimeMillis());
+            fileData.put("protocol_version", "1.0");
+            fileData.put("timestamp", System.currentTimeMillis());
             fileList.add(fileData);
         }
 
         // 构建完整报文
         Map<String, Object> payload = new HashMap<>();
-        payload.put("files",  fileList);
+        payload.put("files", fileList);
 
 
         // 序列化并发送（使用GSON库）
         out.println(new Gson().toJson(payload));
         out.flush();  // 保持原有刷新机制
     }
+
     public Map<String, FileInfo> receiveFileList(BufferedReader in) throws IOException {
         StringBuilder json = new StringBuilder();
         String line;
-        while ((line = in.readLine())  != null) { // 兼容多行JSON传输
+        while ((line = in.readLine()) != null) { // 兼容多行JSON传输
             json.append(line);
         }
 
         JsonObject root = JsonParser.parseString(json.toString()).getAsJsonObject();
         // 验证协议版本
-        if (!root.get("protocol_version").getAsString().equals("1.1"))  {
+        if (!root.get("protocol_version").getAsString().equals("1.0")) {
             throw new ProtocolException("版本不兼容");
         }
 
         // 反序列化核心数据
         Map<String, FileInfo> result = new HashMap<>();
-        for (JsonElement elem : root.getAsJsonArray("files"))  {
+        for (JsonElement elem : root.getAsJsonArray("files")) {
             JsonObject fileObj = elem.getAsJsonObject();
             FileInfo info = new FileInfo();
-            info.filename  = fileObj.get("filename").getAsString();
-            info.total_chunks  = fileObj.get("total_chunks").getAsInt();
+            info.filename = fileObj.get("filename").getAsString();
+            info.total_chunks = fileObj.get("total_chunks").getAsInt();
 
             // 分块数据重建
-            for (JsonElement chunkElem : fileObj.getAsJsonArray("chunks"))  {
+            for (JsonElement chunkElem : fileObj.getAsJsonArray("chunks")) {
                 JsonObject chunk = chunkElem.getAsJsonObject();
                 info.chunks.add(new FileInfo.ChunkInfo(
                         chunk.get("number").getAsInt(),
                         chunk.get("hash").getAsString()
                 ));
             }
-            result.put(info.filename,  info);
+            result.put(info.filename, info);
         }
         return result;
     }
 
-    Map<String, FileInfo> remoteFileList;
     public boolean compareFileList(BufferedReader in) {
         try {
             //比较本地文件列表变量和远程客户端发送的列表
             remoteFileList = receiveFileList(in);
-            if (isLocalConsistent(currentFileList,remoteFileList)){
+            if (isLocalConsistent(currentFileList, remoteFileList)) {
                 return true;
             }
-        } catch (IOException | NoSuchAlgorithmException e) {
+        } catch (IOException e) {
             throw new RuntimeException(e);
         }
         return false;
     }
+
     public boolean isLocalConsistent(Map<String, FileInfo> local, Map<String, FileInfo> remote) {
         // 关键文件全量覆盖检查
         return remote.keySet().stream().allMatch(local::containsKey);
