@@ -5,6 +5,7 @@ import java.io.InputStream;
 import java.security.DigestInputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Collections;
 import java.util.List;
 
 public class FileInfo {
@@ -61,6 +62,17 @@ public class FileInfo {
         return fileHash;
     }
 
+    public String getFilePath() {return "file";
+    }
+
+    public List<ChunkInfo> getChunks() {
+        return Collections.unmodifiableList(chunks);  // 返回不可修改的副本保证数据安全
+    }
+
+    public int getTotalChunks() {
+        return total_chunks;
+    }
+
     public static class ChunkInfo {
         public int chunk_number;
         public String hash;
@@ -68,6 +80,10 @@ public class FileInfo {
         public ChunkInfo(int chunk_number, String hash) {
             this.chunk_number = chunk_number;
             this.hash = hash;
+        }
+
+        public String getHash() {
+            return this.hash;
         }
     }
 }

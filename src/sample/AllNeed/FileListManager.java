@@ -18,9 +18,15 @@ public class FileListManager {
 
     private Map<String, FileInfo> currentFileList = new HashMap<>();
 
+    public Map<String, FileInfo> getCurrentFileList() {
+        return currentFileList;
+    }
+
+    public FileInfo getFileInfo(String filename) {
+        return currentFileList.get(filename);
+    }
     // 在FileListManager类中添加：
-    public static FileInfo generateFileInfo(Path path)
-            throws IOException, NoSuchAlgorithmException {
+    public static FileInfo generateFileInfo(Path path) throws IOException, NoSuchAlgorithmException {
 
         File file = path.toFile();
         long fileSize = Files.size(path);
@@ -129,7 +135,7 @@ public class FileListManager {
             fileData.put("total_chunks",  fileInfo.chunks.isEmpty()  ? 0 : fileInfo.total_chunks);
             fileData.put("chunk_size",  FileInfo.chunk_size);  // 保持全局块大小
 
-            // 分块数据智能封装
+            //分块数据智能封装
             List<Map<String, Object>> chunks = new ArrayList<>();
             if (!fileInfo.chunks.isEmpty())  {
                 for (FileInfo.ChunkInfo chunk : fileInfo.chunks)  {
@@ -143,7 +149,7 @@ public class FileListManager {
             fileData.put("chunks",  chunks);
 
             // 增加校验元数据
-            fileData.put("protocol_version",  "2.3");
+            fileData.put("protocol_version",  "1.1");
             fileData.put("timestamp",  System.currentTimeMillis());
             fileList.add(fileData);
         }
@@ -166,7 +172,7 @@ public class FileListManager {
 
         JsonObject root = JsonParser.parseString(json.toString()).getAsJsonObject();
         // 验证协议版本
-        if (!root.get("protocol_version").getAsString().equals("2.3"))  {
+        if (!root.get("protocol_version").getAsString().equals("1.1"))  {
             throw new ProtocolException("版本不兼容");
         }
 
@@ -191,11 +197,11 @@ public class FileListManager {
         return result;
     }
 
+    Map<String, FileInfo> remoteFileList;
     public boolean compareFileList(BufferedReader in) {
         try {
-            Map<String, FileInfo> remoteFileList ;
-            updateFileList();
-            remoteFileList=receiveFileList(in);
+            //比较本地文件列表变量和远程客户端发送的列表
+            remoteFileList = receiveFileList(in);
             if (isLocalConsistent(currentFileList,remoteFileList)){
                 return true;
             }
@@ -260,6 +266,7 @@ public class FileListManager {
     }
 
 
-
-
+    public Map<String, FileInfo> getFileList() {
+        return this.currentFileList;
+    }
 }

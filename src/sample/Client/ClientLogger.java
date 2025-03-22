@@ -14,8 +14,6 @@ class ClientLogger {
     private static final String LOG_DIR = "logs";
     private static final DateTimeFormatter DATE_FORMAT =
             DateTimeFormatter.ofPattern("yyyyMMdd").withZone(ZoneId.systemDefault());
-    private static final DateTimeFormatter TIME_FORMAT =
-            DateTimeFormatter.ofPattern("HH:mm:ss.SSS").withZone(ZoneId.systemDefault());
 
     public static synchronized void log(JTextArea displayArea, String message) {
         try {

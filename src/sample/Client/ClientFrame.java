@@ -17,6 +17,7 @@ public class ClientFrame extends JPanel {
     private final JTextField inputField;
     private final JButton sendButton;
     private final JButton connectButton;
+    private   JButton syncButton,shareButton,uploadButton,refreshButton;
     private final JTextField ipField;
     private final JProgressBar progressBar;
     String ip;
@@ -27,16 +28,14 @@ public class ClientFrame extends JPanel {
     public ClientFrame() {
         setLayout(new BorderLayout());
 
-        // ▶▶ 创建右侧在线用户面板 ▶▶
-        // 在类成员变量区新增组件声明
+        // 创建右侧在线用户面板
         // 右侧在线用户面板
         JPanel onlinePanel = new JPanel(new BorderLayout());
         onlinePanel.setPreferredSize(new Dimension(200, 0)); // 设置固定宽度
         onlinePanel.setBorder(BorderFactory.createTitledBorder(" 在线用户"));
 
         // 刷新按钮
-        // 刷新按钮
-        JButton refreshButton = new JButton("刷新");
+        refreshButton = new JButton("刷新");
         refreshButton.addActionListener(e -> updateOnlineUsers()); // 绑定刷新事件
 
         // 在线用户显示区域
@@ -79,15 +78,15 @@ public class ClientFrame extends JPanel {
 
         add(connectionPanel, BorderLayout.NORTH);
         // 在connectionPanel增加上传按钮
-        JButton uploadButton = new JButton("上传");
+        uploadButton = new JButton("上传");
         connectionPanel.add(uploadButton);  // 添加到现有的连接面板
 
 
         // 在connectionPanel增加分享按钮
-        JButton shareButton = new JButton("群发");
+        shareButton = new JButton("群发");
         connectionPanel.add(shareButton);  // 添加到现有的连接面板
 
-        JButton syncButton = new JButton("同步");
+        syncButton = new JButton("同步");
         connectionPanel.add(syncButton);  // 添加到现有的连接面板
 
         // 在inputPanel增加进度显示
@@ -114,12 +113,24 @@ public class ClientFrame extends JPanel {
 
         // 初始化时禁用发送按钮，直到成功连接
         sendButton.setEnabled(false);
+        syncButton.setEnabled(false);
+        shareButton.setEnabled(false);
+        uploadButton.setEnabled(false);
+        refreshButton.setEnabled(false);
     }
 
     private void sync()  {
+        client.sendMessage("filelist");
+        try {
+            displayArea.append("同步服务器文件列表\n");
+            Thread.sleep(2000);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
         updateOnlineUsers();
         try {
-            Thread.sleep(200);
+            displayArea.append("同步在线用户列表\n");
+            Thread.sleep(2000);
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
@@ -222,6 +233,10 @@ public class ClientFrame extends JPanel {
                         if (client.isConnected()) {
                             isConnected = true;
                             sendButton.setEnabled(true);
+                            syncButton.setEnabled(true);
+                            refreshButton.setEnabled(true);
+                            shareButton.setEnabled(true);
+                            uploadButton.setEnabled(true);
                             connectButton.setText("断开");
                             appendToDisplayArea("连接到服务器ip为 " + ip + "\n");
                         } else {
