@@ -5,7 +5,6 @@ import sample.AllNeed.FileInfo;
 import sample.AllNeed.FileListManager;
 
 import java.io.*;
-import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.file.Files;
@@ -90,7 +89,9 @@ public class ClientFileServer extends Thread {
      */
     private static boolean performHandshake(PrintWriter out, BufferedReader in) throws IOException {
         out.println("LIST_REQUEST");  // 发送列表请求
-        return in.readLine().startsWith("files");  // 验证响应头
+        String msg=in.readLine();
+        return msg.equals("File_List");
+        //return in.readLine().startsWith("File_List");  // 验证响应头
     }
 
     /**
@@ -102,14 +103,18 @@ public class ClientFileServer extends Thread {
      */
     private boolean connectAndVerify(String ip, int port) {
         try (
-                Socket socket = new Socket(ip, port);
+                Socket socket = new Socket(ip,port);
                 BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                 PrintWriter out = new PrintWriter(socket.getOutputStream(), true)
         ) {
 
             // 设置连接超时（JDK 8+特性）
-            socket.connect(new InetSocketAddress(ip, port), CONNECT_TIMEOUT);
+            //socket.connect(new InetSocketAddress(ip, port), CONNECT_TIMEOUT);
 
+            // 增加流初始化验证
+            if (in.ready()  && out.checkError())  {
+                throw new IOException("Stream initialization failed");
+            }
             // 协议握手流程
             if (performHandshake(out, in)) {
                 return handleFileTransfer(in);
@@ -187,7 +192,7 @@ public class ClientFileServer extends Thread {
 
     private void getTheAnotherClientFiles(String ip, String port) {
         new Thread(() -> {
-            try {
+           try {
 
                 // 请求文件列表
                 Map<String, FileInfo> remoteFiles = this.client.fileListManager.getCurrentFileList();
@@ -196,12 +201,18 @@ public class ClientFileServer extends Thread {
                 Map<String, FileInfo> localFiles = fileListManager.getFileList();
                 List<String> filesToDownload = findMissingFiles(remoteFiles, localFiles);
 
+                if(!filesToDownload.isEmpty()){
+               ClientLogger.log(this.client.displayArea,"文件同步开始下载");
+
                 // 下载缺失文件
                 for (String filename : filesToDownload) {
                     FileInfo remoteFile = remoteFiles.get(filename);
                     downloadFile(ip, port, remoteFile);
+                    ClientLogger.log(this.client.displayArea,"文件下载"+remoteFile);
                 }
 
+                    ClientLogger.log(this.client.displayArea,"文件同步结束");
+                }else {ClientLogger.log(this.client.displayArea,"无文件需要同步");}
             } catch (IOException e) {
                 ClientLogger.log(this.client.displayArea, "文件同步错误: " + e.getMessage());
             }
@@ -310,13 +321,13 @@ public class ClientFileServer extends Thread {
 
         @Override
         public void run() {
-            try (DataInputStream in = new DataInputStream(clientSocket.getInputStream());
+            try (BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
                  PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true)) {
 
                 System.out.printf(" 【%tT】客户端连接：%s%n",
                         System.currentTimeMillis(), clientSocket.getRemoteSocketAddress());
 
-                String command = in.readUTF();
+                String command = in.readLine();
                 if ("LIST_REQUEST".equals(command)) {
                     System.out.printf(" 【%tT】收到文件列表请求%n", System.currentTimeMillis());
                     fileListManager.updateAndSendFileList(out);
@@ -335,9 +346,9 @@ public class ClientFileServer extends Thread {
             }
         }
 
-        private void handleChunkRequest(DataInputStream in, PrintWriter out) throws IOException {
-            String filename = in.readUTF();
-            int chunkNumber = in.readInt();
+        private void handleChunkRequest(BufferedReader in, PrintWriter out) throws IOException {
+            String filename = in.readLine();
+            int chunkNumber = Integer.parseInt(in.readLine());
 
             try {
                 FileInfo fileInfo = fileListManager.getFileInfo(filename);

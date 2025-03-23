@@ -5,6 +5,7 @@ import java.io.InputStream;
 import java.security.DigestInputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -30,7 +31,7 @@ public class FileInfo {
     public static long chunk_size = 10 * 1024 * 1024;
     public String filename;
     public int total_chunks;
-    public List<ChunkInfo> chunks;
+    public List<ChunkInfo> chunks= new ArrayList<>(); // 确保默认初始化 ;
     private long fileSize;
     private String fileHash;
 

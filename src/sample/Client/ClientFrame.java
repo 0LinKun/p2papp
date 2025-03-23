@@ -315,11 +315,6 @@ public class ClientFrame extends JPanel {
                         if (client.isConnected()) {
                             isConnected = true;
                             sendButton.setEnabled(true);
-                            syncButton.setEnabled(true);
-                            refreshButton.setEnabled(true);
-                            shareButton.setEnabled(true);
-                            uploadButton.setEnabled(true);
-                            connectButton.setText("断开");
                             appendToDisplayArea("连接到服务器ip为 " + ip + "\n");
                         } else {
                             appendToDisplayArea(ip + " 服务器不存在或连接失败\n");
@@ -343,7 +338,7 @@ public class ClientFrame extends JPanel {
             client.exit();
             isConnected = false;
             sendButton.setEnabled(false);
-            connectButton.setText("Connect");
+            connectButton.setText("连接");
             appendToDisplayArea("Disconnected from server.\n");
         }
     }
@@ -362,6 +357,11 @@ public class ClientFrame extends JPanel {
             appendToDisplayArea("Sending: " + textToSend + "\n");
             inputField.setText("");
             if (textToSend.contains("#")) {
+                syncButton.setEnabled(true);
+                refreshButton.setEnabled(true);
+                shareButton.setEnabled(true);
+                uploadButton.setEnabled(true);
+                connectButton.setText("断开");
                 client.checkMessage(textToSend);
             } else if (textToSend.equals("cls")) {
                 displayArea.setText("");

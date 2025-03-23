@@ -93,7 +93,7 @@ public class Server {
             logToFile(logMessage);
             //输出服务器ip地址
             IpAddressFetcher.IpAddress(displayArea);
-            new Thread(() -> acceptConnections()).start();
+            new Thread(this::acceptConnections).start();
         } catch (Exception e) {
             e.printStackTrace();
             displayArea.append(nowtime(now) + "  " + "服务开启错误: " + e.getMessage() + "\n");
@@ -220,13 +220,13 @@ public class Server {
 
         @Override
         public void run() {
-            try (DataInputStream dis = new DataInputStream(dataSocket.getInputStream());
+            try (DataInputStream in = new DataInputStream(dataSocket.getInputStream());
                  DataOutputStream dos = new DataOutputStream(dataSocket.getOutputStream())) {
 
                 // 读取文件名长度和文件名
-                int fileNameLength = dis.readInt();
+                int fileNameLength = in.readInt();
                 byte[] fileNameBytes = new byte[fileNameLength];
-                dis.readFully(fileNameBytes);
+                in.readFully(fileNameBytes);
                 String fileName = new String(fileNameBytes, java.nio.charset.StandardCharsets.UTF_8);
 
                 // 创建文件保存路径
@@ -242,7 +242,7 @@ public class Server {
                     while (true) {
                         int chunkSize;
                         try {
-                            chunkSize = dis.readInt(); // 读取块大小
+                            chunkSize = in.readInt(); // 读取块大小
                         } catch (java.io.EOFException e) {
                             break; // 数据读取完毕
                         }
@@ -250,7 +250,7 @@ public class Server {
                         if (chunkSize <= 0) break;
 
                         // 读取块数据并写入文件
-                        dis.readFully(buffer, 0, chunkSize);
+                        in.readFully(buffer, 0, chunkSize);
                         fos.write(buffer, 0, chunkSize);
                     }
                     fos.flush();
@@ -315,10 +315,10 @@ public class Server {
                     logToFile(logMessage);
                     if (line == null || line.equalsIgnoreCase("exit")) {
                         break;
-                    } else if (line.equals("ls")) {
+                    } else if (line.equals("ls")) {//输出用户在线列表
                         out.println(listAllUsers());
                         displayArea.append(listAllUsers());
-                    } else if (line.equals("updateOnlineUsers")) {
+                    } else if (line.equals("updateOnlineUsers")) {//输出用户在线列表json版本
                         sendOnlineUsers(out);
                     } else if (line.equals("filelist") || line.equals("fl")) {
                         fileListManager.updateAndSendFileList(out);

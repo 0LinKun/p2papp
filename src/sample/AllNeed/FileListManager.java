@@ -1,9 +1,6 @@
 package sample.AllNeed;
 
-import com.google.gson.Gson;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
+import com.google.gson.*;
 
 import java.io.*;
 import java.net.ProtocolException;
@@ -163,6 +160,7 @@ public class FileListManager {
 
 
         // 序列化并发送（使用GSON库）
+        out.println("File_List");
         out.println(new Gson().toJson(payload));
         out.flush();  // 保持原有刷新机制
     }
@@ -176,8 +174,20 @@ public class FileListManager {
 
         JsonObject root = JsonParser.parseString(json.toString()).getAsJsonObject();
         // 验证协议版本
-        if (!root.get("protocol_version").getAsString().equals("1.0")) {
-            throw new ProtocolException("版本不兼容");
+        JsonArray filesArray = root.getAsJsonArray("files");
+        for (JsonElement fileElement : filesArray) {
+            JsonObject fileObj = fileElement.getAsJsonObject();
+
+            // 增强字段存在性校验（防御性编程）
+            if (!fileObj.has("protocol_version"))  {
+                throw new ProtocolException("协议版本字段缺失");
+            }
+
+            String version = fileObj.get("protocol_version").getAsString();
+            if (!"1.0".equals(version)) {
+                throw new ProtocolException("文件" + fileObj.get("filename")  + "版本不兼容，当前支持1.0");
+            }
+
         }
 
         // 反序列化核心数据

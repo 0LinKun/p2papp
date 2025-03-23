@@ -122,7 +122,9 @@ public class Client implements Runnable {
                             }
                         } else if (ListenUserList(response)) {//接受到USER_LIST启动刷新用户列表函数
                             continue;
-                        } else if (ListenServerFileList(response)) {//接受到files启动刷新服务器文件列表格式
+                        } else if (response.equals("File_List")) {//接受到files启动刷新服务器文件列表格式
+                            response=in.readLine();
+                            ListenServerFileList(response);
                             continue;
                         }
                         ClientLogger.log(displayArea, response);
@@ -165,49 +167,74 @@ public class Client implements Runnable {
      * }
      */
     public boolean ListenServerFileList(String response) {
+
+
         Gson gson = new Gson();
         try {
             // 解析顶层数据结构
             Map<String, Object> responseMap = gson.fromJson(response, new TypeToken<Map<String, Object>>() {
             }.getType());
-            if (!responseMap.containsKey("files")) {
-                return false;
-            }
-            // 获取文件列表数组
-            List<Map<String, Object>> serverFiles = (List<Map<String, Object>>) responseMap.get("files");
-            // 创建临时文件列表
-            Map<String, FileInfo> serverFileList = new HashMap<>();
-            // 遍历每个文件项
-            for (Map<String, Object> fileEntry : serverFiles) {
-                FileInfo fileInfo = new FileInfo();
 
-                // 基础字段映射
-                fileInfo.filename = (String) fileEntry.get("filename");
-                fileInfo.total_chunks = ((Double) fileEntry.get("total_chunks")).intValue();
+                // 获取文件列表数组
+                List<Map<String, Object>> serverFiles = (List<Map<String, Object>>) responseMap.get("files");
+                // 创建临时文件列表
+                Map<String, FileInfo> serverFileList = new HashMap<>();
+                // 遍历每个文件项
+                for (Map<String, Object> fileEntry : serverFiles) {
+                    FileInfo fileInfo = new FileInfo();
 
-                // 分块数据映射
-                List<Map<String, Object>> chunks = (List<Map<String, Object>>) fileEntry.get("chunks");
-                fileInfo.chunks = new ArrayList<>();
+                    // 基础字段映射
+                    fileInfo.filename = (String) fileEntry.get("filename");
+                    fileInfo.total_chunks = ((Double) fileEntry.get("total_chunks")).intValue();
 
-                for (Map<String, Object> chunk : chunks) {
-                    FileInfo.ChunkInfo chunkInfo = new FileInfo.ChunkInfo(
-                            ((Double) chunk.get("number")).intValue(),
-                            (String) chunk.get("hash")
-                    );
-                    fileInfo.chunks.add(chunkInfo);
+                    // 分块数据映射
+                    List<Map<String, Object>> chunks = (List<Map<String, Object>>) fileEntry.get("chunks");
+                    fileInfo.chunks = new ArrayList<>();
+
+                    for (Map<String, Object> chunk : chunks) {
+                        FileInfo.ChunkInfo chunkInfo = new FileInfo.ChunkInfo(
+                                ((Double) chunk.get("number")).intValue(),
+                                (String) chunk.get("hash")
+                        );
+                        fileInfo.chunks.add(chunkInfo);
+                    }
+
+                    serverFileList.put(fileInfo.filename, fileInfo);
                 }
 
-                serverFileList.put(fileInfo.filename, fileInfo);
+                // 更新当前文件列表
+                currentFileList = serverFileList;
+
+            ClientLogger.log(displayArea,  "══ 服务器文件列表详情 ══");
+            for (FileInfo file : serverFileList.values())  {
+                // 基础信息日志
+                ClientLogger.log(displayArea,  String.format(
+                        "▣ 文件 [%s] | 总分块数: %d | 块大小: %dB",
+                        file.filename,
+                        file.total_chunks,
+                        FileInfo.chunk_size
+                ));
+
+                // 分块详情日志（按需展开）
+                if (!file.chunks.isEmpty())  {
+                    ClientLogger.log(displayArea,  "  分块校验信息：");
+                    for (FileInfo.ChunkInfo chunk : file.chunks)  {
+                        ClientLogger.log(displayArea,  String.format(
+                                "    ↳ #%d | MD5: %s | 偏移量: %,d",
+                                chunk.chunk_number,
+                                chunk.hash,
+                                chunk.chunk_number  * FileInfo.chunk_size
+                        ));
+                    }
+                }
+            }
+            ClientLogger.log(displayArea,  "══ 列表同步完成 ══");
+            } catch(JsonSyntaxException e){
+                System.err.println("JSON 解析错误: " + e.getMessage());
+            } catch(ClassCastException e){
+                System.err.println(" 类型转换错误: " + e.getMessage());
             }
 
-            // 更新当前文件列表
-            currentFileList = serverFileList;
-            displayArea.append("同步服务器文件列表完成\n");
-        } catch (JsonSyntaxException e) {
-            System.err.println("JSON 解析错误: " + e.getMessage());
-        } catch (ClassCastException e) {
-            System.err.println(" 类型转换错误: " + e.getMessage());
-        }
         return true;
     }
 
