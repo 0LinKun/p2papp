@@ -5,10 +5,15 @@ import sample.AllNeed.FileInfo;
 import sample.AllNeed.FileListManager;
 
 import java.io.*;
+import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
@@ -102,11 +107,11 @@ public class ClientFileServer extends Thread {
      * @return 验证通过返回true，否则false
      */
     private boolean connectAndVerify(String ip, int port) {
-        try (
+        try {
                 Socket socket = new Socket(ip,port);
                 BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-                PrintWriter out = new PrintWriter(socket.getOutputStream(), true)
-        ) {
+                PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
+
 
             // 设置连接超时（JDK 8+特性）
             //socket.connect(new InetSocketAddress(ip, port), CONNECT_TIMEOUT);
@@ -117,7 +122,9 @@ public class ClientFileServer extends Thread {
             }
             // 协议握手流程
             if (performHandshake(out, in)) {
-                return handleFileTransfer(in);
+                boolean flag =handleFileTransfer(in);
+                socket.close();
+                return flag;
             }
         } catch (IOException | NoSuchAlgorithmException e) {
             System.err.printf(" 【%tT】连接 %s:%d 失败：%s%n",
@@ -135,10 +142,10 @@ public class ClientFileServer extends Thread {
      */
     private boolean handleFileTransfer(BufferedReader in) throws NoSuchAlgorithmException {
         if (this.client.fileListManager.compareFileList(in)) {
-            System.out.printf(" 【%tT】发现匹配服务器，触发传输%n", System.currentTimeMillis());
+            System.out.printf(" 【%tT】发现不匹配服务器，触发传输%n", System.currentTimeMillis());
             return true;
         }
-        System.out.printf(" 【%tT】文件列表不匹配，继续搜索%n", System.currentTimeMillis());
+        System.out.printf(" 【%tT】文件列表一致，继续搜索%n", System.currentTimeMillis());
         return false;
     }
 
@@ -185,7 +192,7 @@ public class ClientFileServer extends Thread {
                 ip = parts[0];
                 port = parts[1];
                 getTheAnotherClientFiles(ip, port);
-                break; // 找到有效服务器后终止遍历
+                //break; // 找到有效服务器后终止遍历
             }
         }
     }
@@ -195,11 +202,13 @@ public class ClientFileServer extends Thread {
            try {
 
                 // 请求文件列表
-                Map<String, FileInfo> remoteFiles = this.client.fileListManager.getCurrentFileList();
+                Map<String, FileInfo> remoteFiles = this.client.fileListManager.remoteFileList;
 
                 // 对比文件差异
                 Map<String, FileInfo> localFiles = fileListManager.getFileList();
                 List<String> filesToDownload = findMissingFiles(remoteFiles, localFiles);
+
+                ClientLogger.log(this.client.displayArea,filesToDownload.toString());
 
                 if(!filesToDownload.isEmpty()){
                ClientLogger.log(this.client.displayArea,"文件同步开始下载");
@@ -231,28 +240,53 @@ public class ClientFileServer extends Thread {
     }
 
     private void downloadFile(String ip, String port, FileInfo fileInfo) throws IOException {
+          int BUFFER_SIZE = 8192;
+       String filename = fileInfo.filename;
+        Path downloadPath = Paths.get(DOWNLOAD_DIR,  filename);
         try (Socket socket = new Socket(ip, Integer.parseInt(port));
              DataOutputStream out = new DataOutputStream(socket.getOutputStream());
-             DataInputStream in = new DataInputStream(socket.getInputStream())) {
+             DataInputStream in = new DataInputStream(socket.getInputStream()))  {
 
-            File file = new File(DOWNLOAD_DIR + fileInfo.getFileName());
-            Files.createDirectories(file.getParentFile().toPath());
 
-            // 下载所有文件块
-            try (FileOutputStream fos = new FileOutputStream(file)) {
-                for (int i = 0; i < fileInfo.getTotalChunks(); i++) {
-                    out.writeUTF("CHUNK_REQUEST");
-                    out.writeUTF(fileInfo.getFileName());
-                    out.writeInt(i);
+            // 发送请求
+            out.writeUTF("FILE_REQUEST");
+            out.writeUTF(filename);
+            out.flush();
 
-                    // 接收块数据
-                    int chunkSize = in.readInt();
-                    byte[] chunkData = new byte[chunkSize];
-                    in.readFully(chunkData);
-                    fos.write(chunkData);
+            // 处理响应
+            String header = in.readUTF();
+            if (header.equals("FILE_RESPONSE"))  {
+                long fileSize = in.readLong();
+                Files.createDirectories(downloadPath.getParent());
+
+                try (FileChannel fileChannel = FileChannel.open(
+                        downloadPath,
+                        StandardOpenOption.CREATE,
+                        StandardOpenOption.WRITE)) {
+
+                    long transferred = 0;
+                    ByteBuffer buffer = ByteBuffer.allocate(BUFFER_SIZE);
+
+                    while (transferred < fileSize) {
+                        int read = in.read(buffer.array(),  0,
+                                (int) Math.min(BUFFER_SIZE,  fileSize - transferred));
+                        if (read == -1) throw new EOFException("Unexpected end of stream");
+
+                        buffer.limit(read);
+                        fileChannel.write(buffer);
+                        buffer.clear();
+                        transferred += read;
+                    }
                 }
+                System.out.println(" 下载完成: " + filename + " (" + fileSize + " bytes)");
+            } else if (header.equals("ERROR"))  {
+                System.err.println(" 服务端错误: " + in.readUTF());
             }
-            ClientLogger.log(this.client.displayArea, "下载完成: " + fileInfo.getFileName());
+        } catch (IOException e) {
+            System.err.println(" 传输失败: " + e.getMessage());
+            try {
+                Files.deleteIfExists(downloadPath);
+            } catch (IOException ignored) {}
         }
     }
 
@@ -327,53 +361,90 @@ public class ClientFileServer extends Thread {
                 System.out.printf(" 【%tT】客户端连接：%s%n",
                         System.currentTimeMillis(), clientSocket.getRemoteSocketAddress());
 
-                String command = in.readLine();
-                if ("LIST_REQUEST".equals(command)) {
-                    System.out.printf(" 【%tT】收到文件列表请求%n", System.currentTimeMillis());
-                    fileListManager.updateAndSendFileList(out);
-                } else if ("CHUNK_REQUEST".equals(command)) {
-                    handleChunkRequest(in, out);
-                }
+                    String command = in.readLine();
+                    if ("LIST_REQUEST".equals(command)) {
+                        System.out.printf(" 【%tT】收到文件列表请求%n", System.currentTimeMillis());
+                        fileListManager.updateAndSendFileList(out);
+                    } else if ("FILE_REQUEST".equals(command)) {
+                        System.out.printf(" 【%tT】收到文件下载请求%n", System.currentTimeMillis());
+                        handleFileRequest(clientSocket);
+                    }
 
             } catch (IOException | NoSuchAlgorithmException e) {
                 System.err.printf(" 【%tT】请求处理异常：%s%n", System.currentTimeMillis(), e.getMessage());
+            }
+        }
+
+        private void handleFileRequest(Socket clientSocket) {
+            final String FILE_STORAGE_DIR = "./file/";
+
+            try (DataInputStream dataIn = new DataInputStream(clientSocket.getInputStream());
+                 DataOutputStream dataOut = new DataOutputStream(clientSocket.getOutputStream()))  {
+
+                // 1. 读取文件名（使用UTF协议）
+                String filename = dataIn.readUTF();
+                System.out.println("[client]  收到文件请求: " + filename);
+
+                // 2. 构建文件路径
+                Path filePath = Paths.get(FILE_STORAGE_DIR  + filename);
+
+                // 3. 文件存在性检查
+                if (!Files.exists(filePath))  {
+                    dataOut.writeUTF("ERROR:File  not found");
+                    dataOut.flush();
+                    System.out.println("[client]  文件不存在: " + filename);
+                    return;
+                }
+
+                // 4. 读取文件内容（流式方式避免内存溢出）
+                byte[] fileData;
+                try (InputStream fileIn = Files.newInputStream(filePath);
+                     ByteArrayOutputStream buffer = new ByteArrayOutputStream()) {
+                    byte[] temp = new byte[8192];
+                    int bytesRead;
+                    while ((bytesRead = fileIn.read(temp))  != -1) {
+                        buffer.write(temp,  0, bytesRead);
+                    }
+                    fileData = buffer.toByteArray();
+                }
+
+                // 5. 哈希校验
+                String calculatedHash = FileListManager.calculateHash(fileData,  fileData.length);
+                FileInfo fileInfo = fileListManager.getFileInfo(filename);
+                if (fileInfo == null || !calculatedHash.equals(fileInfo.getFileHash()))  {
+                    dataOut.writeUTF("ERROR:File  verification failed");
+                    dataOut.flush();
+                    System.out.println("[client]  文件校验失败: " + filename);
+                    return;
+                }
+
+                // 6. 发送文件响应
+                dataOut.writeUTF("FILE_RESPONSE");
+                dataOut.writeLong(fileData.length);
+                dataOut.write(fileData);
+                dataOut.flush();
+                System.out.println("[client]  已发送文件: " + filename + " (" + fileData.length  + " bytes)");
+
+            } catch (NoSuchAlgorithmException e) {
+                System.err.println("[client]  哈希算法不可用: " + e.getMessage());
+                sendError(clientSocket, "ERROR:Hash algorithm error");
+            } catch (IOException e) {
+                System.err.println("[client]  传输异常: " + e.getMessage());
             } finally {
                 try {
                     clientSocket.close();
                 } catch (IOException e) {
-                    System.err.printf(" 【%tT】关闭连接异常：%s%n", System.currentTimeMillis(), e.getMessage());
+                    System.err.println("[client]  关闭连接异常: " + e.getMessage());
                 }
             }
         }
 
-        private void handleChunkRequest(BufferedReader in, PrintWriter out) throws IOException {
-            String filename = in.readLine();
-            int chunkNumber = Integer.parseInt(in.readLine());
-
-            try {
-                FileInfo fileInfo = fileListManager.getFileInfo(filename);
-                if (fileInfo == null) {
-                    out.println("ERROR:  File not found");
-                    return;
-                }
-
-                // 读取文件块
-                byte[] chunkData = Files.readAllBytes(Paths.get(fileInfo.getFilePath()));
-                String chunkHash = FileListManager.calculateHash(chunkData, chunkData.length);
-
-                // 验证块哈希
-                if (!chunkHash.equals(fileInfo.getChunks().get(chunkNumber).getHash())) {
-                    out.println("ERROR:  Chunk verification failed");
-                    return;
-                }
-
-                // 发送块数据
-                out.println("CHUNK_RESPONSE");
-                ((DataOutputStream) clientSocket.getOutputStream()).writeInt(chunkData.length);
-                clientSocket.getOutputStream().write(chunkData);
-
-            } catch (NoSuchAlgorithmException | IOException e) {
-                out.println("ERROR:  " + e.getMessage());
+        private void sendError(Socket socket, String message) {
+            try (DataOutputStream dataOut = new DataOutputStream(socket.getOutputStream()))  {
+                dataOut.writeUTF(message);
+                dataOut.flush();
+            } catch (IOException ex) {
+                System.err.println("[Server]  发送错误信息失败: " + ex.getMessage());
             }
         }
     }

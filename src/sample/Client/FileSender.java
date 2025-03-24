@@ -1,6 +1,7 @@
 package sample.Client;
 
 import javax.swing.*;
+import java.awt.*;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -11,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * UDP多播文件发送服务类，实现可靠的分片文件传输协议
@@ -72,7 +74,7 @@ public class FileSender {
      * 文件发送器构造方法（含完整的分片传输生命周期管理）
      *
      * @param filePath  源文件路径（支持绝对/相对路径）
-     * @param jTextArea 日志输出组件（需实现线程安全访问）
+     * @param clientFrame 日志输出组件（需实现线程安全访问）
      * @throws IOException 当发生以下情况时抛出：
      *                     <ul>
      *                       <li>文件不存在或不可读</li>
@@ -94,7 +96,9 @@ public class FileSender {
      * </ul>
      */
 
-    public FileSender(String filePath, JTextArea jTextArea) throws IOException {
+    public FileSender(String filePath, ClientFrame clientFrame) throws IOException {
+        // 新增时间戳记录
+        final AtomicLong lastUpdate = new AtomicLong(System.currentTimeMillis());
         Path path = Paths.get(filePath);
         String fileName = path.getFileName().toString();
         byte[] fileBytes = Files.readAllBytes(path);
@@ -102,6 +106,8 @@ public class FileSender {
         int totalChunks = (int) Math.ceil((double) fileBytes.length / DATA_CHUNK_SIZE);
 
         try (MulticastSocket socket = new MulticastSocket()) {
+            // 初始化进度条
+            updateProgress(clientFrame, 0, "开始传输");
             InetAddress group = InetAddress.getByName(MULTICAST_GROUP);
             socket.setSendBufferSize(MAX_DATAGRAM_SIZE * 2);
 
@@ -127,12 +133,36 @@ public class FileSender {
                         packetData, packetData.length, group, PORT);
 
                 socket.send(packet);
+                // 智能更新策略（每2%或每秒更新一次）
+                int progress = (int) ((chunkId + 1) * 100.0 / totalChunks);
+                if (progress % 2 == 0 || System.currentTimeMillis()  - lastUpdate.get() > 1000) {
+                    updateProgress(clientFrame, progress,
+                            String.format(" 传输中 %.1fMB/%.1fMB",
+                                    (chunkId * DATA_CHUNK_SIZE)/1048576.0,
+                                    fileBytes.length/1048576.0));
+                    lastUpdate.set(System.currentTimeMillis());
+                }
                 Thread.sleep(1);  // 防止发送过快导致丢包
             }
-            ClientLogger.log(jTextArea, "发送文件：" + fileName);
+            ClientLogger.log(clientFrame.displayArea, "发送文件：" + fileName);
         } catch (InterruptedException e) {
-            ClientLogger.log(jTextArea, "发送文件失败：" + fileName);
+            ClientLogger.log(clientFrame.displayArea, "发送文件失败：" + fileName);
             Thread.currentThread().interrupt();
         }
+    }
+    private void updateProgress(ClientFrame frame, int progress, String status) {
+        SwingUtilities.invokeLater(()  -> {
+            if (progress >= 0) {
+                frame.progressBar.setValue(progress);
+                frame.progressBar.setString(status);
+                frame.progressBar.setForeground(new Color(
+                        Math.min(255,  50 + progress*2),
+                        Math.max(0,  200 - progress),
+                        100));
+            } else {
+                frame.progressBar.setForeground(Color.RED);
+                frame.progressBar.setString(status);
+            }
+        });
     }
 }

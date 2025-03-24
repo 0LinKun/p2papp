@@ -13,7 +13,7 @@ import java.util.*;
 
 public class FileListManager {
 
-    Map<String, FileInfo> remoteFileList;
+    public  Map<String, FileInfo> remoteFileList;
     private Map<String, FileInfo> currentFileList = new HashMap<>();
 
     // 在FileListManager类中添加：
@@ -216,12 +216,12 @@ public class FileListManager {
             //比较本地文件列表变量和远程客户端发送的列表
             remoteFileList = receiveFileList(in);
             if (isLocalConsistent(currentFileList, remoteFileList)) {
-                return true;
+                return false;
             }
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-        return false;
+        return true;
     }
 
     public boolean isLocalConsistent(Map<String, FileInfo> local, Map<String, FileInfo> remote) {

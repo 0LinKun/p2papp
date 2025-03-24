@@ -256,7 +256,7 @@ public class Server {
                     fos.flush();
                     System.out.println("文件接收完成: " + filePath);
                 }
-
+                dataSocket.close();
             } catch (Exception e) {
                 System.out.println("文件传输错误: " + e.getMessage());
             }

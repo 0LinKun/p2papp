@@ -5,6 +5,7 @@ import sample.AllNeed.FileListManager;
 import sample.Server.Server;
 
 import javax.swing.*;
+import javax.swing.plaf.basic.BasicProgressBarUI;
 import javax.swing.text.DefaultCaret;
 import java.awt.*;
 import java.io.File;
@@ -13,6 +14,8 @@ import java.io.InputStream;
 import java.net.Socket;
 import java.nio.file.Files;
 import java.security.NoSuchAlgorithmException;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * 客户端主界面类，继承自JPanel，负责构建用户交互界面并处理客户端核心功能逻辑。
@@ -26,12 +29,12 @@ import java.security.NoSuchAlgorithmException;
  */
 public class ClientFrame extends JPanel {
     // 界面组件定义
-    private final JTextArea displayArea;
+    public final JTextArea displayArea;
     private final JTextField inputField;
     private final JButton sendButton;
     private final JButton connectButton;
     private final JTextField ipField;
-    private final JProgressBar progressBar;
+    final JProgressBar progressBar;
     private final JTextArea onlineArea;    // 在线人数显示框
     private final JButton syncButton;
     private final JButton shareButton;
@@ -125,10 +128,33 @@ public class ClientFrame extends JPanel {
         connectionPanel.add(syncButton);  // 添加到现有的连接面板
 
         // 在inputPanel增加进度显示
-        progressBar = new JProgressBar();
+        progressBar = new JProgressBar(0, 100);
         progressBar.setStringPainted(true);
-        progressBar.setPreferredSize(new Dimension(300, 25));
-        inputPanel.add(progressBar, BorderLayout.NORTH);
+        // 现代扁平化样式配置
+        progressBar.setUI(new  BasicProgressBarUI() {
+            @Override
+            protected Color getSelectionBackground() { return Color.WHITE; }
+            @Override
+            protected Color getSelectionForeground() { return Color.DARK_GRAY; }
+        });
+        // 动态尺寸策略
+        progressBar.setPreferredSize(new  Dimension(300, 28));
+        progressBar.setMinimumSize(new  Dimension(250, 22));
+        progressBar.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(1,  1, 2, 1, new Color(0x9E9E9E)),
+                BorderFactory.createEmptyBorder(2,  10, 2, 10)
+        ));
+        // 渐变色动画支持
+        progressBar.addPropertyChangeListener(evt  -> {
+            if ("progress".equals(evt.getPropertyName()))  {
+                int value = (Integer)evt.getNewValue();
+                progressBar.setForeground(new  Color(
+                        Math.min(255,  50 + value * 2),
+                        Math.max(0,  150 - value),
+                        100 + value));
+            }
+        });
+        inputPanel.add(progressBar,  BorderLayout.NORTH);
 
         // 启用自动滚动
         DefaultCaret caret = (DefaultCaret) displayArea.getCaret();
@@ -206,6 +232,7 @@ public class ClientFrame extends JPanel {
      * @see FileSender 文件发送工具类
      */
     private void share() {
+        progressBar.setValue(0);
         client.sendMessage("share");
         JFileChooser fileChooser = new JFileChooser();
         if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
@@ -213,7 +240,7 @@ public class ClientFrame extends JPanel {
             new Thread(() -> {
                 try {
                     //通过组播广播发送文件
-                    new FileSender(selectedFile.toString(), this.displayArea);
+                    new FileSender(selectedFile.toString(), this);
                     System.out.println("File  share successfully.");
                 } catch (IOException ex) {
                     appendToDisplayArea("share失败: " + ex.getMessage() + "\n");
@@ -234,10 +261,13 @@ public class ClientFrame extends JPanel {
      * @see FileListManager#generateFileInfo(java.nio.file.Path)  文件元数据生成方法
      */
     private void upload() {
+        progressBar.setValue(0);
         JFileChooser fileChooser = new JFileChooser();
         if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
             File selectedFile = fileChooser.getSelectedFile();
             new Thread(() -> {
+                final AtomicInteger lastProgress = new AtomicInteger(0);
+                final AtomicLong lastUpdate = new AtomicLong(System.currentTimeMillis());
                 try {
                     Socket fileSock = new Socket(ip, Server.FILE_PORT);
                     // 生成文件元数据
@@ -255,6 +285,8 @@ public class ClientFrame extends JPanel {
                         byte[] buffer = new byte[10 * 1024 * 1024]; // 10MB分块
                         int bytesRead;
                         int chunkIndex = 0;
+                        long totalBytesSent = 0;
+                        long transferStart = System.currentTimeMillis();
 
                         while ((bytesRead = is.read(buffer)) > 0) {
                             String chunkHash = FileListManager.calculateHash(buffer, bytesRead);
@@ -264,12 +296,44 @@ public class ClientFrame extends JPanel {
                             client.sendBinaryData(buffer, bytesRead, fileSock); // 发送二进制数据
                             chunkIndex++;
 
-                            // 更新进度
-                            int progress = (int) ((chunkIndex * 10 * 1024 * 1024 * 100)
-                                    / selectedFile.length());
-                            SwingUtilities.invokeLater(() -> progressBar.setValue(progress));
+                            // 精确进度计算
+                            totalBytesSent += bytesRead;
+                            int progress = (int) ((totalBytesSent * 100) / selectedFile.length());
+
+                            // 动态参数计算
+                            long elapsed = System.currentTimeMillis()  - transferStart;
+                            double speed = (totalBytesSent / 1048576.0) / (elapsed / 1000.0);
+                            double eta = (selectedFile.length()  - totalBytesSent) / (speed * 1048576.0);
+
+                            // 智能更新
+                            if (progress > lastProgress.get()  + 1 ||
+                                    System.currentTimeMillis()  - lastUpdate.get()  > 200) {
+                                SwingUtilities.invokeLater(()  -> {
+                                    progressBar.setValue(progress);
+                                    progressBar.setString(String.format(
+                                            "%d%% - %.1f MB/s - 剩余: %.1fs", progress, speed, eta));
+                                    // 动态颜色
+                                    progressBar.setForeground(new  Color(
+                                            Math.min(255,  50 + progress*2),
+                                            Math.max(0,  200 - progress),
+                                            100));
+                                });
+                                lastProgress.set(progress);
+                                lastUpdate.set(System.currentTimeMillis());
+                            }
                         }
+                        SwingUtilities.invokeLater(()  -> {
+                            progressBar.setValue(100);
+                            progressBar.setString(" 上传完成");
+                        });
+                        fileSock.close();
+                    } catch (Exception ex) {
+                        SwingUtilities.invokeLater(()  -> {
+                            progressBar.setForeground(Color.RED);
+                            progressBar.setString(" 上传失败: " + ex.getMessage());
+                        });
                     }
+
                     appendToDisplayArea("上传文件成功：" + fileInfo.getFileName());
                 } catch (IOException | NoSuchAlgorithmException ex) {
                     appendToDisplayArea("上传失败: " + ex.getMessage() + "\n");
@@ -338,6 +402,10 @@ public class ClientFrame extends JPanel {
             client.exit();
             isConnected = false;
             sendButton.setEnabled(false);
+            syncButton.setEnabled(false);
+            uploadButton.setEnabled(false);
+            shareButton.setEnabled(false);
+            refreshButton.setEnabled(false);
             connectButton.setText("连接");
             appendToDisplayArea("Disconnected from server.\n");
         }
