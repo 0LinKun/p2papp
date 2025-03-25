@@ -213,15 +213,15 @@ public class FileListManager {
 
     public boolean compareFileList(BufferedReader in) {
         try {
-            //比较本地文件列表变量和远程客户端发送的列表
+            //比较本地文件列表变量和远程客户端发送的列表，全部包含返回true，有缺失返回false
             remoteFileList = receiveFileList(in);
             if (isLocalConsistent(currentFileList, remoteFileList)) {
-                return false;
+                return true;
             }
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-        return true;
+        return false;
     }
 
     public boolean isLocalConsistent(Map<String, FileInfo> local, Map<String, FileInfo> remote) {

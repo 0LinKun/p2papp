@@ -34,10 +34,6 @@ import java.util.concurrent.Executors;
  */
 public class ClientFileServer extends Thread {
     /**
-     * 连接超时时间（毫秒）
-     */
-    private static final int CONNECT_TIMEOUT = 3000;
-    /**
      * 默认文件下载存储目录
      */
     private static final String DOWNLOAD_DIR = "file/";
@@ -141,7 +137,7 @@ public class ClientFileServer extends Thread {
      * @throws NoSuchAlgorithmException 当哈希算法不可用时抛出
      */
     private boolean handleFileTransfer(BufferedReader in) throws NoSuchAlgorithmException {
-        if (this.client.fileListManager.compareFileList(in)) {
+        if (!this.client.fileListManager.compareFileList(in)) {
             System.out.printf(" 【%tT】发现不匹配服务器，触发传输%n", System.currentTimeMillis());
             return true;
         }
@@ -239,18 +235,19 @@ public class ClientFileServer extends Thread {
         return missing;
     }
 
+
     private void downloadFile(String ip, String port, FileInfo fileInfo) throws IOException {
           int BUFFER_SIZE = 8192;
        String filename = fileInfo.filename;
         Path downloadPath = Paths.get(DOWNLOAD_DIR,  filename);
         try (Socket socket = new Socket(ip, Integer.parseInt(port));
-             DataOutputStream out = new DataOutputStream(socket.getOutputStream());
+             PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
              DataInputStream in = new DataInputStream(socket.getInputStream()))  {
 
 
             // 发送请求
-            out.writeUTF("FILE_REQUEST");
-            out.writeUTF(filename);
+            out.println("FILE_REQUEST");
+            out.println(filename);
             out.flush();
 
             // 处理响应
@@ -358,8 +355,7 @@ public class ClientFileServer extends Thread {
             try (BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
                  PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true)) {
 
-                System.out.printf(" 【%tT】客户端连接：%s%n",
-                        System.currentTimeMillis(), clientSocket.getRemoteSocketAddress());
+                System.out.printf(" 【%tT】客户端连接：%s%n", System.currentTimeMillis(), clientSocket.getRemoteSocketAddress());
 
                     String command = in.readLine();
                     if ("LIST_REQUEST".equals(command)) {
@@ -378,11 +374,11 @@ public class ClientFileServer extends Thread {
         private void handleFileRequest(Socket clientSocket) {
             final String FILE_STORAGE_DIR = "./file/";
 
-            try (DataInputStream dataIn = new DataInputStream(clientSocket.getInputStream());
+            try (BufferedReader dataIn = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
                  DataOutputStream dataOut = new DataOutputStream(clientSocket.getOutputStream()))  {
 
                 // 1. 读取文件名（使用UTF协议）
-                String filename = dataIn.readUTF();
+                String filename = dataIn.readLine();
                 System.out.println("[client]  收到文件请求: " + filename);
 
                 // 2. 构建文件路径
@@ -408,15 +404,7 @@ public class ClientFileServer extends Thread {
                     fileData = buffer.toByteArray();
                 }
 
-                // 5. 哈希校验
-                String calculatedHash = FileListManager.calculateHash(fileData,  fileData.length);
-                FileInfo fileInfo = fileListManager.getFileInfo(filename);
-                if (fileInfo == null || !calculatedHash.equals(fileInfo.getFileHash()))  {
-                    dataOut.writeUTF("ERROR:File  verification failed");
-                    dataOut.flush();
-                    System.out.println("[client]  文件校验失败: " + filename);
-                    return;
-                }
+
 
                 // 6. 发送文件响应
                 dataOut.writeUTF("FILE_RESPONSE");
@@ -425,9 +413,6 @@ public class ClientFileServer extends Thread {
                 dataOut.flush();
                 System.out.println("[client]  已发送文件: " + filename + " (" + fileData.length  + " bytes)");
 
-            } catch (NoSuchAlgorithmException e) {
-                System.err.println("[client]  哈希算法不可用: " + e.getMessage());
-                sendError(clientSocket, "ERROR:Hash algorithm error");
             } catch (IOException e) {
                 System.err.println("[client]  传输异常: " + e.getMessage());
             } finally {
