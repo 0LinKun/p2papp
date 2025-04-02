@@ -14,10 +14,7 @@ import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.List;
+import java.util.*;
 
 /**
  * P2P大文件分块处理器（符合GB/T 35284-2025分布式存储规范）
@@ -80,11 +77,7 @@ public class P2PFileBlocker {
      * @apiNote 实际实现需替换为符合GM/T 0005-2021的转换方式
      */
     private static String bytesToHex(byte[] bytes) {
-        StringBuilder hexString = new StringBuilder();
-        for (byte b : bytes) {
-            hexString.append(b);
-        }
-        return hexString.toString();
+        return HexFormat.of().formatHex(bytes);
     }
 
     public static void main1(JTextArea jTextArea, String filename) {

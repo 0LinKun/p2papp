@@ -254,7 +254,6 @@ public class BlockServer {
         public FileConfig(
                 @JsonProperty("fileName") String fileName,
                 @JsonProperty("fileHash") String fileHash,
-                @JsonProperty("totalSize") long totalSize,
                 @JsonProperty("chunkSize") int chunkSize,
                 @JsonProperty("chunks") List<ChunkConfig> chunks,
                 @JsonProperty("isoTimestamp") String isoTimestamp

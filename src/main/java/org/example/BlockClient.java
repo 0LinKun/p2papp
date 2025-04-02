@@ -1,7 +1,10 @@
 package org.example;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -12,6 +15,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -29,7 +33,7 @@ public class BlockClient {
     private static final ObjectMapper mapper = new ObjectMapper();
     private static final AtomicInteger completedChunks = new AtomicInteger(0);
     private static volatile boolean downloadCompleted = false;
-
+    static FileConfig metadata;
     public static void BlockClientmain(ArrayList<HashMap<String, String>> userList) {
         if (userList.isEmpty()) {
             System.err.println(" 没有可用客户端节点");
@@ -41,7 +45,7 @@ public class BlockClient {
 
         try {
             // 1. 获取元数据
-            FileConfig metadata = fetchMetadata(userList, filename);
+             metadata = fetchMetadata(userList, filename);
             if (metadata == null) {
                 System.err.println(" 元数据获取失败");
                 return;
@@ -72,8 +76,8 @@ public class BlockClient {
 
     private static FileConfig fetchMetadata(List<HashMap<String, String>> nodes, String filename) {
         for (HashMap<String, String> node : nodes) {
-            String url = String.format("http://%s:8080/%s/_metadata.json",
-                    node.get("IP"), filename);
+            String url = String.format("http://%s:8080/_metadata.json",
+                    node.get("IP"));
             try {
                 HttpRequest request = HttpRequest.newBuilder()
                         .uri(URI.create(url))
@@ -143,7 +147,7 @@ public class BlockClient {
                     .firstValue("X-Content-SHA256")
                     .orElse("");
             if (!receivedHash.equals(chunk.getChunkHash())) {
-                System.err.printf(" 分块 %s 哈希不匹配%n", chunk.getChunkName());
+                System.err.printf(" %s分块 %s 哈希%s不匹配%n", receivedHash,chunk.getChunkName(),chunk.getChunkHash());
                 return false;
             }
 
@@ -156,12 +160,10 @@ public class BlockClient {
         }
     }
 
-    private static synchronized void writeChunk(Path outputFile,
-                                                FileConfig.Chunk chunk, byte[] data)
+    private static synchronized void writeChunk(Path outputFile, FileConfig.Chunk chunk, byte[] data)
             throws Exception {
-        try (FileChannel channel = FileChannel.open(outputFile,
-                StandardOpenOption.WRITE)) {
-            long position = chunk.index * chunk.getChunkSize();
+        try (FileChannel channel = FileChannel.open(outputFile, StandardOpenOption.WRITE)) {
+            long position = chunk.index  * metadata.getChunkSize();  // 使用元数据中定义的标准分块大小
             channel.position(position);
             channel.write(ByteBuffer.wrap(data));
         }
@@ -178,7 +180,7 @@ public class BlockClient {
         while (!downloadCompleted) {
             int completed = completedChunks.get();
             double progress = (completed * 100.0) / totalChunks;
-            System.out.printf("\r%.2f%%  [%s%s]", progress,
+            System.out.printf("\r%.2f%%  [%s%s]\n", progress,
                     "=".repeat((int) (progress / 2)),
                     " ".repeat(50 - (int) (progress / 2)));
             try {
@@ -192,6 +194,7 @@ public class BlockClient {
     private static boolean validateFinalFile(Path file, String expectedHash) {
         try {
             String actualHash = calculateFileHash(file);
+            System.out.println(actualHash+"\n比较\n"+expectedHash);
             return actualHash.equals(expectedHash);
         } catch (Exception e) {
             System.err.println(" 文件校验异常: " + e.getMessage());
@@ -200,26 +203,43 @@ public class BlockClient {
     }
 
     private static String calculateFileHash(Path file) throws Exception {
-        MessageDigest digest = MessageDigest.getInstance("SHA-256");
-        try (FileChannel channel = FileChannel.open(file)) {
-            ByteBuffer buffer = ByteBuffer.allocateDirect(8192);
-            while (channel.read(buffer) != -1) {
-                buffer.flip();
-                digest.update(buffer);
-                buffer.clear();
+        try (InputStream inputStream = Files.newInputStream(file)) {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] buffer = new byte[8192]; // 8KB缓冲区
+
+            // 分块读取计算哈希
+            while (true) {
+                int readCount = inputStream.read(buffer);
+                if (readCount == -1) break;
+                digest.update(buffer, 0, readCount);
             }
-            byte[] hashBytes = digest.digest();
-            return HexFormat.of().formatHex(hashBytes);
+
+            // 转换为十六进制字符串
+            return HexFormat.of().formatHex(digest.digest());
+        } catch (NoSuchAlgorithmException e) {
+            throw new IOException("SHA-256算法不可用", e);
         }
     }
-
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class FileConfig {
         private String fileName;
         private String fileHash;
         private long totalSize;
         private List<Chunk> chunks;
+        private long chunkSize;
+        private int index;
+
 
         // Getters
+        public int getIndex() {
+            return index;
+        }
+
+        public void setIndex(int index) {
+            this.index  = index;
+        }
+        public long getChunkSize() { return chunkSize; }
+        public void setChunkSize(long chunkSize) { this.chunkSize  = chunkSize; }
         public String getFileName() {
             return fileName;
         }
@@ -231,7 +251,7 @@ public class BlockClient {
         public List<Chunk> getChunks() {
             return chunks;
         }
-
+        @JsonIgnoreProperties(ignoreUnknown = true)
         public static class Chunk {
             private int index;
             private String chunkName;
@@ -239,6 +259,13 @@ public class BlockClient {
             private long chunkSize;
 
             // Getters
+            public int getIndex() {
+                return index;
+            }
+
+            public void setIndex(int index) {
+                this.index  = index;
+            }
             public String getChunkName() {
                 return chunkName;
             }
