@@ -231,7 +231,7 @@ public class FileServer {
                 if (matcher.find()) {
                     String fileName = URLDecoder.decode(
                             matcher.group(1),
-                            StandardCharsets.UTF_8.name()
+                            StandardCharsets.UTF_8
                     );
                     // 记录日志（核心新增点）
                     String clientIP = exchange.getRemoteAddress().getAddress().getHostAddress();

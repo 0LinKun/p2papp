@@ -24,7 +24,7 @@ import java.time.format.DateTimeFormatter;
  * @see LogTimeFormatter 关联的时间格式化工具类
  * @since 2024.1.0
  */
-class ClientLogger {
+public class ClientLogger {
     /**
      * 日志存储目录路径，采用相对路径"logs"
      * <p>首次使用时自动创建目录结构，支持Windows/Linux多平台路径格式</p>

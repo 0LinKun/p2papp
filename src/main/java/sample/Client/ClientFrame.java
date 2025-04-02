@@ -1,5 +1,7 @@
 package sample.Client;
 
+import org.example.BlockServer;
+import org.example.P2PFileBlocker;
 import sample.AllNeed.FileInfo;
 import sample.AllNeed.FileListManager;
 import sample.Server.Server;
@@ -14,8 +16,12 @@ import java.io.InputStream;
 import java.net.Socket;
 import java.nio.file.Files;
 import java.security.NoSuchAlgorithmException;
+import java.util.HashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+
+import static org.example.BlockClient.BlockClientmain;
+import static org.example.BlockServer.BlockServermain;
 
 /**
  * 客户端主界面类，继承自JPanel，负责构建用户交互界面并处理客户端核心功能逻辑。
@@ -40,6 +46,8 @@ public class ClientFrame extends JPanel {
     private final JButton shareButton;
     private final JButton uploadButton;
     private final JButton refreshButton;
+    private final JButton FileBlockerButton;
+    private final JButton SycFileBlockerButton;
     String ip;
     /**
      * 客户端网络连接核心实例，负责维护Socket连接及协议通信
@@ -127,34 +135,44 @@ public class ClientFrame extends JPanel {
         syncButton = new JButton("同步");
         connectionPanel.add(syncButton);  // 添加到现有的连接面板
 
+        FileBlockerButton = new JButton("文件分块服务器启动");
+        connectionPanel.add(FileBlockerButton);  // 添加到现有的连接面板
+        SycFileBlockerButton = new JButton("同步分块");
+        connectionPanel.add(SycFileBlockerButton);  // 添加到现有的连接面板
+
         // 在inputPanel增加进度显示
         progressBar = new JProgressBar(0, 100);
         progressBar.setStringPainted(true);
         // 现代扁平化样式配置
-        progressBar.setUI(new  BasicProgressBarUI() {
+        progressBar.setUI(new BasicProgressBarUI() {
             @Override
-            protected Color getSelectionBackground() { return Color.WHITE; }
+            protected Color getSelectionBackground() {
+                return Color.WHITE;
+            }
+
             @Override
-            protected Color getSelectionForeground() { return Color.DARK_GRAY; }
+            protected Color getSelectionForeground() {
+                return Color.DARK_GRAY;
+            }
         });
         // 动态尺寸策略
-        progressBar.setPreferredSize(new  Dimension(300, 28));
-        progressBar.setMinimumSize(new  Dimension(250, 22));
+        progressBar.setPreferredSize(new Dimension(300, 28));
+        progressBar.setMinimumSize(new Dimension(250, 22));
         progressBar.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createMatteBorder(1,  1, 2, 1, new Color(0x9E9E9E)),
-                BorderFactory.createEmptyBorder(2,  10, 2, 10)
+                BorderFactory.createMatteBorder(1, 1, 2, 1, new Color(0x9E9E9E)),
+                BorderFactory.createEmptyBorder(2, 10, 2, 10)
         ));
         // 渐变色动画支持
-        progressBar.addPropertyChangeListener(evt  -> {
-            if ("progress".equals(evt.getPropertyName()))  {
-                int value = (Integer)evt.getNewValue();
-                progressBar.setForeground(new  Color(
-                        Math.min(255,  50 + value * 2),
-                        Math.max(0,  150 - value),
+        progressBar.addPropertyChangeListener(evt -> {
+            if ("progress".equals(evt.getPropertyName())) {
+                int value = (Integer) evt.getNewValue();
+                progressBar.setForeground(new Color(
+                        Math.min(255, 50 + value * 2),
+                        Math.max(0, 150 - value),
                         100 + value));
             }
         });
-        inputPanel.add(progressBar,  BorderLayout.NORTH);
+        inputPanel.add(progressBar, BorderLayout.NORTH);
 
         // 启用自动滚动
         DefaultCaret caret = (DefaultCaret) displayArea.getCaret();
@@ -171,6 +189,8 @@ public class ClientFrame extends JPanel {
         connectButton.addActionListener(e -> connectToServer());
         sendButton.addActionListener(e -> sendMessage());
         syncButton.addActionListener(e -> sync());
+        SycFileBlockerButton.addActionListener(e -> SycFileBlocker());
+        FileBlockerButton.addActionListener(e -> FileBlocker());
 
         // 初始化时禁用发送按钮，直到成功连接
         sendButton.setEnabled(false);
@@ -178,6 +198,48 @@ public class ClientFrame extends JPanel {
         shareButton.setEnabled(false);
         uploadButton.setEnabled(false);
         refreshButton.setEnabled(false);
+        SycFileBlockerButton.setEnabled(false);
+        FileBlockerButton.setEnabled(false);
+    }
+
+    private void FileBlocker() {
+        FileBlockerButton.setEnabled(false);
+        JFileChooser fileChooser = new JFileChooser();
+        // 设置默认目录为项目根目录下的file文件夹
+        fileChooser.setCurrentDirectory(new File(System.getProperty("user.dir") + File.separator + "file"));
+        if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+            File selectedFile = fileChooser.getSelectedFile();
+            new Thread(() -> {
+                //将文件分块
+                P2PFileBlocker.main1(displayArea, selectedFile.getName());
+                try {
+                    //开启文件服务器
+                    BlockServermain(selectedFile.getName());
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }).start();
+
+        }
+    }
+
+    private void SycFileBlocker() {
+        SycFileBlockerButton.setEnabled(false);
+        updateOnlineUsers();
+        new Thread(() -> {
+            try {
+
+                Thread.sleep(1000);
+                BlockClientmain(client.userList);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+
+            for (HashMap<String, String> stringStringHashMap : client.userList) {
+                System.out.println(stringStringHashMap.get("IP"));
+
+            }
+        }).start();
     }
 
     /**
@@ -301,34 +363,34 @@ public class ClientFrame extends JPanel {
                             int progress = (int) ((totalBytesSent * 100) / selectedFile.length());
 
                             // 动态参数计算
-                            long elapsed = System.currentTimeMillis()  - transferStart;
+                            long elapsed = System.currentTimeMillis() - transferStart;
                             double speed = (totalBytesSent / 1048576.0) / (elapsed / 1000.0);
-                            double eta = (selectedFile.length()  - totalBytesSent) / (speed * 1048576.0);
+                            double eta = (selectedFile.length() - totalBytesSent) / (speed * 1048576.0);
 
                             // 智能更新
-                            if (progress > lastProgress.get()  + 1 ||
-                                    System.currentTimeMillis()  - lastUpdate.get()  > 200) {
-                                SwingUtilities.invokeLater(()  -> {
+                            if (progress > lastProgress.get() + 1 ||
+                                    System.currentTimeMillis() - lastUpdate.get() > 200) {
+                                SwingUtilities.invokeLater(() -> {
                                     progressBar.setValue(progress);
                                     progressBar.setString(String.format(
                                             "%d%% - %.1f MB/s - 剩余: %.1fs", progress, speed, eta));
                                     // 动态颜色
-                                    progressBar.setForeground(new  Color(
-                                            Math.min(255,  50 + progress*2),
-                                            Math.max(0,  200 - progress),
+                                    progressBar.setForeground(new Color(
+                                            Math.min(255, 50 + progress * 2),
+                                            Math.max(0, 200 - progress),
                                             100));
                                 });
                                 lastProgress.set(progress);
                                 lastUpdate.set(System.currentTimeMillis());
                             }
                         }
-                        SwingUtilities.invokeLater(()  -> {
+                        SwingUtilities.invokeLater(() -> {
                             progressBar.setValue(100);
                             progressBar.setString(" 上传完成");
                         });
                         fileSock.close();
                     } catch (Exception ex) {
-                        SwingUtilities.invokeLater(()  -> {
+                        SwingUtilities.invokeLater(() -> {
                             progressBar.setForeground(Color.RED);
                             progressBar.setString(" 上传失败: " + ex.getMessage());
                         });
@@ -406,6 +468,8 @@ public class ClientFrame extends JPanel {
             uploadButton.setEnabled(false);
             shareButton.setEnabled(false);
             refreshButton.setEnabled(false);
+            SycFileBlockerButton.setEnabled(false);
+            FileBlockerButton.setEnabled(false);
             connectButton.setText("连接");
             appendToDisplayArea("Disconnected from server.\n");
         }
@@ -429,6 +493,8 @@ public class ClientFrame extends JPanel {
                 refreshButton.setEnabled(true);
                 shareButton.setEnabled(true);
                 uploadButton.setEnabled(true);
+                SycFileBlockerButton.setEnabled(true);
+                FileBlockerButton.setEnabled(true);
                 connectButton.setText("断开");
                 client.checkMessage(textToSend);
             } else if (textToSend.equals("cls")) {
